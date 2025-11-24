@@ -34,6 +34,8 @@ class Config:
     @classmethod
     def simple_decrypt(cls, etxt):
         r = etxt.rfind('*')
+        if r == -1:
+            return etxt
         etxt = etxt[r:]
         x = base64.b64decode(etxt.encode('utf-8'))
         for i in range(r+1):
@@ -52,7 +54,7 @@ class Config:
     def log_level(cls):
         lvl = cls.all_configs().get("log", {}).get("log_level", "INFO").upper()
         return logging._nameToLevel[lvl]
-    
+
     @classmethod
     def log_handler(cls):
         handlers = cls.all_configs().get("log", {}).get('log_handler', ['file', 'stdout'])
@@ -68,13 +70,12 @@ class Config:
         encrypted = False
         for k, v in cfg.items():
             if isinstance(v, dict):
-                cls._check_encrypted(v)
+                encrypted |= cls._check_encrypted(v)
             elif k == 'password' and not v.startswith('*'):
                 cfg[k] = cls.simple_encrypt(v)
                 encrypted = True
 
-        if encrypted:
-            cls.save(cfg)
+        return encrypted
 
     @classmethod
     @lru_cache(maxsize=None)
@@ -91,7 +92,8 @@ class Config:
         with open(cfg_path, 'r') as f:
             allconfigs = json.load(f)
 
-        cls._check_encrypted(allconfigs)
+        if cls._check_encrypted(allconfigs):
+            cls.save(allconfigs)
 
         return allconfigs
 
