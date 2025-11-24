@@ -1,0 +1,9 @@
+fastapi
+uvicorn[standard]
+sqlalchemy[asyncio]
+aiomysql
+fastapi-users[sqlalchemy]
+python-multipart
+pydantic[email]
+jinja2
+aiofiles

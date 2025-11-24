@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>个人信息 - 用户管理系统</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <div class="container">
+        <div class="nav">
+            <h2>个人信息</h2>
+            <div class="nav-links">
+                <a href="#" id="adminLink" style="display: none;">用户管理</a>
+                <a href="#" onclick="logout()">退出登录</a>
+            </div>
+        </div>
+        
+        <div id="alert" style="display: none;"></div>
+        
+        <div id="loading" class="loading">加载中...</div>
+        
+        <div id="userInfo" style="display: none;">
+            <div class="user-info">
+                <p><strong>用户ID:</strong> <span id="userId"></span></p>
+                <p><strong>邮箱:</strong> <span id="userEmail"></span></p>
+                <p><strong>用户名:</strong> <span id="userName"></span></p>
+                <p><strong>账号状态:</strong> <span id="userActive"></span></p>
+                <p><strong>邮箱验证:</strong> <span id="userVerified"></span></p>
+                <p><strong>管理员权限:</strong> <span id="userSuperuser"></span></p>
+            </div>
+            
+            <h3>更新信息</h3>
+            <form id="updateForm">
+                <div class="form-group">
+                    <label for="newUsername">新用户名</label>
+                    <input type="text" id="newUsername" name="newUsername">
+                </div>
+                <div class="form-group">
+                    <label for="newPassword">新密码（留空则不修改）</label>
+                    <input type="password" id="newPassword" name="newPassword" minlength="6">
+                </div>
+                <button type="submit" class="btn">更新信息</button>
+            </form>
+        </div>
+    </div>
+
+    <script src="/static/js/auth.js"></script>
+    <script>
+        checkAuth();
+
+        async function loadUserInfo() {
+            try {
+                const user = await getCurrentUser();
+                
+                document.getElementById('userId').textContent = user.id;
+                document.getElementById('userEmail').textContent = user.email;
+                document.getElementById('userName').textContent = user.username || '未设置';
+                document.getElementById('userActive').innerHTML = user.is_active 
+                    ? '<span class="badge badge-success">激活</span>' 
+                    : '<span class="badge badge-danger">未激活</span>';
+                document.getElementById('userVerified').innerHTML = user.is_verified 
+                    ? '<span class="badge badge-success">已验证</span>' 
+                    : '<span class="badge badge-warning">未验证</span>';
+                document.getElementById('userSuperuser').innerHTML = user.is_superuser 
+                    ? '<span class="badge badge-success">是</span>' 
+                    : '<span class="badge badge-danger">否</span>';
+                
+                document.getElementById('newUsername').value = user.username || '';
+                
+                // 如果是管理员，显示用户管理链接
+                if (user.is_superuser) {
+                    const adminLink = document.getElementById('adminLink');
+                    adminLink.style.display = 'inline';
+                    adminLink.href = '/admin.html';
+                }
+                
+                document.getElementById('loading').style.display = 'none';
+                document.getElementById('userInfo').style.display = 'block';
+            } catch (error) {
+                showError(error.message);
+                document.getElementById('loading').style.display = 'none';
+            }
+        }
+
+        document.getElementById('updateForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const newUsername = document.getElementById('newUsername').value;
+            const newPassword = document.getElementById('newPassword').value;
+            
+            const updateData = {};
+            if (newUsername) updateData.username = newUsername;
+            if (newPassword) {
+                if (newPassword.length < 6) {
+                    showError('密码长度至少为6位');
+                    return;
+                }
+                updateData.password = newPassword;
+            }
+            
+            if (Object.keys(updateData).length === 0) {
+                showError('请至少修改一项信息');
+                return;
+            }
+            
+            try {
+                const user = await getCurrentUser();
+                await updateUser(user.id, updateData);
+                showSuccess('更新成功！');
+                setTimeout(() => {
+                    location.reload();
+                }, 1500);
+            } catch (error) {
+                showError(error.message);
+            }
+        });
+
+        loadUserInfo();
+    </script>
+</body>
+</html>

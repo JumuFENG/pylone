@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>用户管理系统</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <div class="container">
+        <h1>欢迎使用用户管理系统</h1>
+        <div style="text-align: center; margin-top: 30px;">
+            <a href="/login.html" class="btn" style="display: inline-block; text-decoration: none; margin: 10px;">登录</a>
+            <a href="/register.html" class="btn btn-secondary" style="display: inline-block; text-decoration: none; margin: 10px;">注册</a>
+        </div>
+        <div style="text-align: center; margin-top: 30px;">
+            <a href="/docs" style="color: #667eea; text-decoration: none;">查看 API 文档</a>
+        </div>
+    </div>
+
+    <script src="/static/js/auth.js"></script>
+    <script>
+        // 如果已登录，直接跳转到个人信息页
+        if (getToken()) {
+            window.location.href = '/profile.html';
+        }
+    </script>
+</body>
+</html>
