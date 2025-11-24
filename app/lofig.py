@@ -8,7 +8,7 @@ from functools import lru_cache
 
 
 class Config:
-    app_name = 'pyswee'
+    app_name = 'pyswee' # app name for logging
     @classmethod
     @lru_cache(maxsize=1)
     def _cfg_path(cls):
@@ -64,6 +64,19 @@ class Config:
         return lhandlers
 
     @classmethod
+    def _check_encrypted(cls, cfg):
+        encrypted = False
+        for k, v in cfg.items():
+            if isinstance(v, dict):
+                cls._check_encrypted(v)
+            elif k == 'password' and not v.startswith('*'):
+                cfg[k] = cls.simple_encrypt(v)
+                encrypted = True
+
+        if encrypted:
+            cls.save(cfg)
+
+    @classmethod
     @lru_cache(maxsize=None)
     def all_configs(cls):
         cfg_path = cls._cfg_path()
@@ -71,6 +84,7 @@ class Config:
         if not os.path.isfile(cfg_path):
             allconfigs = {}
             allconfigs['log'] = {'log_level':'DEBUG', 'log_handler': ['stdout']}
+            allconfigs['client'] = {'app_name': cls.app_name}
             cls.save(allconfigs)
             return allconfigs
 
@@ -82,8 +96,8 @@ class Config:
         return allconfigs
 
     @classmethod
-    def _check_encrypted(cls, cfg):
-        pass
+    def client_config(cls):
+        return cls.all_configs().get('client', {})
 
 
 logging.basicConfig(
