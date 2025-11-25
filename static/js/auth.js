@@ -37,6 +37,7 @@ async function register(email, password, username) {
             headers: {
                 'Content-Type': 'application/json',
             },
+            credentials: 'include', // 重要：包含 Cookie
             body: JSON.stringify({
                 email: email,
                 password: password,
@@ -66,17 +67,16 @@ async function login(email, password) {
             headers: {
                 'Content-Type': 'application/x-www-form-urlencoded',
             },
+            credentials: 'include', // 重要：包含 Cookie
             body: formData
         });
 
         if (!response.ok) {
-            const error = await response.json();
-            throw new Error(error.detail || '登录失败');
+            throw new Error('登录失败：邮箱或密码错误');
         }
 
-        const data = await response.json();
-        setToken(data.access_token);
-        return data;
+        // Cookie 认证返回 204，不需要处理响应体
+        return { success: true };
     } catch (error) {
         throw error;
     }
@@ -84,15 +84,10 @@ async function login(email, password) {
 
 async function logout() {
     try {
-        const token = getToken();
-        if (token) {
-            await fetch(`${API_BASE}/auth/jwt/logout`, {
-                method: 'POST',
-                headers: {
-                    'Authorization': `Bearer ${token}`
-                }
-            });
-        }
+        await fetch(`${API_BASE}/auth/jwt/logout`, {
+            method: 'POST',
+            credentials: 'include' // 重要：包含 Cookie
+        });
     } catch (error) {
         console.error('Logout error:', error);
     } finally {
@@ -102,20 +97,12 @@ async function logout() {
 }
 
 async function getCurrentUser() {
-    const token = getToken();
-    if (!token) {
-        throw new Error('未登录');
-    }
-
     const response = await fetch(`${API_BASE}/users/me`, {
-        headers: {
-            'Authorization': `Bearer ${token}`
-        }
+        credentials: 'include' // 重要：包含 Cookie
     });
 
     if (!response.ok) {
         if (response.status === 401) {
-            clearToken();
             window.location.href = '/login.html';
         }
         throw new Error('获取用户信息失败');
@@ -125,13 +112,12 @@ async function getCurrentUser() {
 }
 
 async function updateUser(userId, data) {
-    const token = getToken();
     const response = await fetch(`${API_BASE}/users/${userId}`, {
         method: 'PATCH',
         headers: {
-            'Authorization': `Bearer ${token}`,
             'Content-Type': 'application/json'
         },
+        credentials: 'include', // 重要：包含 Cookie
         body: JSON.stringify(data)
     });
 
@@ -144,11 +130,8 @@ async function updateUser(userId, data) {
 }
 
 async function getAllUsers() {
-    const token = getToken();
     const response = await fetch(`${API_BASE}/admin/users`, {
-        headers: {
-            'Authorization': `Bearer ${token}`
-        }
+        credentials: 'include' // 重要：包含 Cookie
     });
 
     if (!response.ok) {
@@ -159,12 +142,9 @@ async function getAllUsers() {
 }
 
 async function deleteUser(userId) {
-    const token = getToken();
     const response = await fetch(`${API_BASE}/users/${userId}`, {
         method: 'DELETE',
-        headers: {
-            'Authorization': `Bearer ${token}`
-        }
+        credentials: 'include' // 重要：包含 Cookie
     });
 
     if (!response.ok) {
@@ -172,9 +152,15 @@ async function deleteUser(userId) {
     }
 }
 
-function checkAuth() {
-    const token = getToken();
-    if (!token) {
+async function checkAuth() {
+    try {
+        const response = await fetch(`${API_BASE}/users/me`, {
+            credentials: 'include'
+        });
+        if (!response.ok) {
+            window.location.href = '/login.html';
+        }
+    } catch (error) {
         window.location.href = '/login.html';
     }
 }

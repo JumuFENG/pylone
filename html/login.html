@@ -28,11 +28,6 @@
 
     <script src="/static/js/auth.js"></script>
     <script>
-        // 如果已登录，跳转到用户详情页
-        if (getToken()) {
-            window.location.href = '/profile.html';
-        }
-
         document.getElementById('loginForm').addEventListener('submit', async (e) => {
             e.preventDefault();
             

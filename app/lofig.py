@@ -101,6 +101,10 @@ class Config:
     def client_config(cls):
         return cls.all_configs().get('client', {})
 
+    @classmethod
+    def database_config(cls):
+        return cls.all_configs().get('database', {})
+
 
 logging.basicConfig(
     level=Config.log_level(),

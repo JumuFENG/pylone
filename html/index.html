@@ -20,10 +20,16 @@
 
     <script src="/static/js/auth.js"></script>
     <script>
-        // 如果已登录，直接跳转到个人信息页
-        if (getToken()) {
-            window.location.href = '/profile.html';
-        }
+        // 检查是否已登录
+        fetch('/users/me', { credentials: 'include' })
+            .then(response => {
+                if (response.ok) {
+                    window.location.href = '/profile.html';
+                }
+            })
+            .catch(() => {
+                // 未登录，保持在当前页面
+            });
     </script>
 </body>
 </html>

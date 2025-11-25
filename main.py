@@ -1,81 +1,49 @@
-from contextlib import asynccontextmanager
-from typing import List
-from fastapi import FastAPI, Depends, HTTPException
+from fastapi import FastAPI, Request, Depends
 from fastapi.staticfiles import StaticFiles
+from fastapi.templating import Jinja2Templates
 from fastapi.responses import RedirectResponse
 from app.lofig import Config, logger
-from app.db import engine, Base, User, get_async_session
-from app.schemas import UserCreate, UserRead, UserUpdate
-from app.users import auth_backend, fastapi_users, current_active_user
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from app.users.router import router as users_router
+from app.admin.router import router as admin_router
+from app.users.manager import fastapi_users
 
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    # 启动时创建数据库表
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-    logger.info("Database tables created")
-    yield
-    # 关闭时清理
-    logger.info("Shutting down")
+cfg = Config.client_config()
+app = FastAPI(title=cfg.get('app_name', 'pyswee'))
 
+app.include_router(users_router)
+app.include_router(admin_router)
 
-app = FastAPI(title="User Management API", lifespan=lifespan)
+# 挂载静态文件
+app.mount("/static", StaticFiles(directory="static"), name="static")
+app.mount("/html", StaticFiles(directory="html", html=True), name="html")
 
-# 注册认证路由
-app.include_router(
-    fastapi_users.get_auth_router(auth_backend),
-    prefix="/auth/jwt",
-    tags=["auth"],
-)
-
-# 注册用户注册路由
-app.include_router(
-    fastapi_users.get_register_router(UserRead, UserCreate),
-    prefix="/auth",
-    tags=["auth"],
-)
-
-# 注册用户管理路由
-app.include_router(
-    fastapi_users.get_users_router(UserRead, UserUpdate),
-    prefix="/users",
-    tags=["users"],
-)
+# 保留 templates 用于服务端渲染（如果需要）
+templates = Jinja2Templates(directory="templates")
 
 
 @app.get("/")
 async def root():
-    return RedirectResponse(url="/login.html")
+    return RedirectResponse(url="/html/index.html")
 
+@app.get("/login.html")
+async def login_redirect():
+    return RedirectResponse(url="/html/login.html")
 
-@app.get("/protected-route")
-async def protected_route(user: User = Depends(current_active_user)):
-    return {"message": f"Hello {user.email}!", "user_id": user.id}
+@app.get("/register.html")
+async def register_redirect():
+    return RedirectResponse(url="/html/register.html")
 
+@app.get("/profile.html")
+async def profile_redirect():
+    return RedirectResponse(url="/html/profile.html")
 
-# 管理员专用：获取所有用户列表
-@app.get("/admin/users", response_model=List[UserRead], tags=["admin"])
-async def get_all_users(
-    user: User = Depends(current_active_user),
-    session: AsyncSession = Depends(get_async_session)
-):
-    if not user.is_superuser:
-        raise HTTPException(status_code=403, detail="需要管理员权限")
-    
-    result = await session.execute(select(User))
-    users = result.scalars().all()
-    return users
+@app.get("/admin.html")
+async def admin_redirect():
+    return RedirectResponse(url="/html/admin.html")
 
-
-# 挂载静态文件
-app.mount("/static", StaticFiles(directory="static"), name="static")
-app.mount("/", StaticFiles(directory="static", html=True), name="html")
 
 
 if __name__ == '__main__':
     import uvicorn
-    cfg = Config.all_configs()
-    uvicorn.run("main:app", host="0.0.0.0", port=cfg.get('client', {}).get('port', 8000), reload=True)
+    uvicorn.run(app, host="0.0.0.0", port=cfg.get('port', 8000))
