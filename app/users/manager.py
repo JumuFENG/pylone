@@ -31,7 +31,7 @@ async def get_user_db() -> AsyncGenerator[SQLAlchemyUserDatabase, None]:
 
 class UserManager(BaseUserManager[User, int]):
     def parse_id(self, value):
-        return value
+        return int(value)
 
 
 async def get_user_manager():

@@ -7,6 +7,9 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from app.lofig import Config
 from app.db import cfg, engine, Base
 from app.users.models import User
+from app.users.schemas import UserCreate
+from app.users.manager import get_user_db, UserManager
+
 
 cfg['password'] = Config.simple_decrypt(cfg['password'])
 
@@ -44,9 +47,7 @@ async def check_database():
 
 async def create_admin():
     """创建管理员用户"""
-    from app.users.schemas import UserCreate
-    from app.users.manager import get_user_db, UserManager
-    
+
     admin_data = {
         "username": "admin",
         "email": "admin@admin.com",
@@ -59,7 +60,7 @@ async def create_admin():
     async for user_db in get_user_db():
         # 检查管理员是否已存在
         existing_user = await user_db.get_by_email(admin_data["email"])
-        
+
         if existing_user:
             print(f"管理员用户 '{admin_data['username']}' 已存在")
         else:

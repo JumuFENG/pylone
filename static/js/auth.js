@@ -7,6 +7,9 @@ function showError(message) {
         alertDiv.className = 'alert alert-error';
         alertDiv.textContent = message;
         alertDiv.style.display = 'block';
+        setTimeout(() => {
+            alertDiv.style.display = 'none';
+        }, 3000);
     }
 }
 
@@ -16,6 +19,9 @@ function showSuccess(message) {
         alertDiv.className = 'alert alert-success';
         alertDiv.textContent = message;
         alertDiv.style.display = 'block';
+        setTimeout(() => {
+            alertDiv.style.display = 'none';
+        }, 3000);
     }
 }
 

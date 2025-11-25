@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException, Depends
 from .manager import fastapi_users, auth_backend, current_superuser
+from .manager import get_user_manager, get_user_db
 from .schemas import UserRead, UserCreate, UserUpdate
-from app.db import async_session_maker
 from .models import User
 
 router = APIRouter()
@@ -38,16 +38,19 @@ async def update_user_protected(
             status_code=403,
             detail="无法修改超级管理员账户"
         )
-    
-    # 使用 FastAPI Users 的默认更新逻辑
-    from .manager import get_user_manager, get_user_db
-    
+
+    if user_id != current_user.id and not current_user.is_superuser:
+        raise HTTPException(
+            status_code=403,
+            detail="普通用户无法修改其他用户信息"
+        )
+
     async for user_db in get_user_db():
         async for user_manager in get_user_manager():
             user = await user_db.get(user_id)
             if not user:
                 raise HTTPException(status_code=404, detail="用户不存在")
-            
+
             updated_user = await user_manager.update(user_update, user, safe=False, request=None)
             return updated_user
 
@@ -63,15 +66,18 @@ async def delete_user_protected(
             status_code=403,
             detail="无法删除超级管理员账户"
         )
-    
-    # 使用 FastAPI Users 的默认删除逻辑
-    from .manager import get_user_manager, get_user_db
-    
+
+    if user_id != current_user.id and not current_user.is_superuser:
+        raise HTTPException(
+            status_code=403,
+            detail="普通用户无法删除其他用户"
+        )
+
     async for user_db in get_user_db():
         async for user_manager in get_user_manager():
             user = await user_db.get(user_id)
             if not user:
                 raise HTTPException(status_code=404, detail="用户不存在")
-            
+
             await user_manager.delete(user, request=None)
             return

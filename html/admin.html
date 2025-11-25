@@ -15,11 +15,11 @@
                 <a href="#" onclick="logout()">退出登录</a>
             </div>
         </div>
-        
+
         <div id="alert" style="display: none;"></div>
-        
+
         <div id="loading" class="loading">加载中...</div>
-        
+
         <div id="userList" style="display: none;">
             <table>
                 <thead>
@@ -36,8 +36,47 @@
                 <tbody id="userTableBody">
                 </tbody>
             </table>
+
+            <div style="margin-top: 30px; padding-top: 30px; border-top: 2px solid #e0e0e0;">
+                <h3>创建新用户</h3>
+                <form id="createUserForm">
+                    <div style="display: flex; gap: 15px; margin-bottom: 15px;">
+                        <div style="display: flex;">
+                            <label for="newUserUsername">用户名 *</label>
+                            <input type="text" id="newUserUsername" name="username" required style="width: 60%;height: 30px;">
+                        </div>
+                        <div style="display: flex;">
+                            <label for="newUserEmail">邮箱 *</label>
+                            <input type="email" id="newUserEmail" name="email" required style="width: 60%;height: 30px;">
+                        </div>
+                        <div style="display: flex;">
+                            <label for="newUserPassword">密码 * <small style="color: #666;">(至少6位)</small></label>
+                            <input type="password" id="newUserPassword" name="password" required minlength="6" style="width: 60%;height: 30px;">
+                        </div>
+                    </div>
+                    <div style="display: flex;">
+                        <div style="display: flex; gap: 55px; align-items: center; margin-bottom: 15px;width: 83%;">
+                            <label style="margin: 0;">
+                                <input type="checkbox" id="newUserIsActive" name="is_active" checked>
+                                激活账户
+                            </label>
+                            <label style="margin: 0;">
+                                <input type="checkbox" id="newUserIsVerified" name="is_verified">
+                                邮箱已验证
+                            </label>
+                            <label style="margin: 0;">
+                                <input type="checkbox" id="newUserIsSuperuser" name="is_superuser">
+                                管理员权限
+                            </label>
+                        </div>
+                        <div>
+                            <button type="submit" class="action-btn action-btn-edit" style="margin-left: auto;">创建用户</button>
+                        </div>
+                    </div>
+                </form>
+            </div>
         </div>
-    </div>
+    </div>""
 
     <script src="/static/js/auth.js"></script>
     <script>
@@ -63,11 +102,11 @@
                 const users = await getAllUsers();
                 const tbody = document.getElementById('userTableBody');
                 tbody.innerHTML = '';
-                
+
                 users.forEach(user => {
                     const row = document.createElement('tr');
                     const isSuperAdmin = user.id === 1; // ID 为 1 的是超级管理员，受保护
-                    
+
                     row.innerHTML = `
                         <td>${user.id}</td>
                         <td>${user.email}</td>
@@ -89,7 +128,7 @@
                     `;
                     tbody.appendChild(row);
                 });
-                
+
                 document.getElementById('loading').style.display = 'none';
                 document.getElementById('userList').style.display = 'block';
             } catch (error) {
@@ -130,10 +169,62 @@
             }
         }
 
+        async function createUser(event) {
+            event.preventDefault();
+
+            const email = document.getElementById('newUserEmail').value;
+            const username = document.getElementById('newUserUsername').value;
+            const password = document.getElementById('newUserPassword').value;
+            const is_active = document.getElementById('newUserIsActive').checked;
+            const is_verified = document.getElementById('newUserIsVerified').checked;
+            const is_superuser = document.getElementById('newUserIsSuperuser').checked;
+
+            try {
+                const userData = {
+                    email,
+                    username,
+                    password,
+                    is_active,
+                    is_verified,
+                    is_superuser
+                };
+
+                await register(email, password, username);
+
+                // 如果需要设置特殊权限，需要更新用户
+                if (is_superuser || is_verified || !is_active) {
+                    // 获取刚创建的用户
+                    const users = await getAllUsers();
+                    const newUser = users.find(u => u.email === email);
+
+                    if (newUser) {
+                        const updateData = {};
+                        if (is_superuser) updateData.is_superuser = true;
+                        if (is_verified) updateData.is_verified = true;
+                        if (!is_active) updateData.is_active = false;
+
+                        if (Object.keys(updateData).length > 0) {
+                            await updateUser(newUser.id, updateData);
+                        }
+                    }
+                }
+
+                showSuccess('用户创建成功！');
+                document.getElementById('createUserForm').reset();
+                document.getElementById('newUserIsActive').checked = true;
+                setTimeout(() => loadUsers(), 1000);
+            } catch (error) {
+                showError(error.message);
+            }
+        }
+
         async function init() {
             const isAdmin = await checkAdminAccess();
             if (isAdmin) {
                 await loadUsers();
+
+                // 绑定创建用户表单
+                document.getElementById('createUserForm').addEventListener('submit', createUser);
             }
         }
 
