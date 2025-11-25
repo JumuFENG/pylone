@@ -1,16 +1,5 @@
 const API_BASE = '';
 
-function getToken() {
-    return localStorage.getItem('access_token');
-}
-
-function setToken(token) {
-    localStorage.setItem('access_token', token);
-}
-
-function clearToken() {
-    localStorage.removeItem('access_token');
-}
 
 function showError(message) {
     const alertDiv = document.getElementById('alert');
@@ -37,7 +26,7 @@ async function register(email, password, username) {
             headers: {
                 'Content-Type': 'application/json',
             },
-            credentials: 'include', // 重要：包含 Cookie
+            credentials: 'include',
             body: JSON.stringify({
                 email: email,
                 password: password,
@@ -67,7 +56,7 @@ async function login(email, password) {
             headers: {
                 'Content-Type': 'application/x-www-form-urlencoded',
             },
-            credentials: 'include', // 重要：包含 Cookie
+            credentials: 'include',
             body: formData
         });
 
@@ -86,19 +75,18 @@ async function logout() {
     try {
         await fetch(`${API_BASE}/auth/jwt/logout`, {
             method: 'POST',
-            credentials: 'include' // 重要：包含 Cookie
+            credentials: 'include'
         });
     } catch (error) {
         console.error('Logout error:', error);
     } finally {
-        clearToken();
         window.location.href = '/login.html';
     }
 }
 
 async function getCurrentUser() {
     const response = await fetch(`${API_BASE}/users/me`, {
-        credentials: 'include' // 重要：包含 Cookie
+        credentials: 'include'
     });
 
     if (!response.ok) {
@@ -117,7 +105,7 @@ async function updateUser(userId, data) {
         headers: {
             'Content-Type': 'application/json'
         },
-        credentials: 'include', // 重要：包含 Cookie
+        credentials: 'include',
         body: JSON.stringify(data)
     });
 
@@ -131,7 +119,7 @@ async function updateUser(userId, data) {
 
 async function getAllUsers() {
     const response = await fetch(`${API_BASE}/admin/users`, {
-        credentials: 'include' // 重要：包含 Cookie
+        credentials: 'include'
     });
 
     if (!response.ok) {
@@ -144,7 +132,7 @@ async function getAllUsers() {
 async function deleteUser(userId) {
     const response = await fetch(`${API_BASE}/users/${userId}`, {
         method: 'DELETE',
-        credentials: 'include' // 重要：包含 Cookie
+        credentials: 'include'
     });
 
     if (!response.ok) {
