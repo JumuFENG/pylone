@@ -5,7 +5,6 @@ from fastapi.responses import RedirectResponse
 from app.lofig import Config, logger
 from app.users.router import router as users_router
 from app.admin.router import router as admin_router
-from app.users.manager import fastapi_users
 
 
 cfg = Config.client_config()

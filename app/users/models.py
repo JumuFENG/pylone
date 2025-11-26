@@ -8,4 +8,4 @@ class User(SQLAlchemyBaseUserTable, Base):
     id = Column(Integer, primary_key=True)
     username = Column(String(50), unique=True, nullable=False)
     parent_id = Column(Integer, nullable=True)
-    realcash = Column(SmallInteger, nullable=False, default=0)
+    realcash = Column(SmallInteger, nullable=False, default=1)

@@ -25,7 +25,7 @@ function showSuccess(message) {
     }
 }
 
-async function register(email, password, username) {
+async function register(userData) {
     try {
         const response = await fetch(`${API_BASE}/auth/register`, {
             method: 'POST',
@@ -33,11 +33,7 @@ async function register(email, password, username) {
                 'Content-Type': 'application/json',
             },
             credentials: 'include',
-            body: JSON.stringify({
-                email: email,
-                password: password,
-                username: username
-            })
+            body: JSON.stringify(userData)
         });
 
         if (!response.ok) {

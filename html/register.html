@@ -55,7 +55,7 @@
             }
             
             try {
-                await register(email, password, username);
+                await register({email, password, username});
                 showSuccess('注册成功！正在跳转到登录页...');
                 setTimeout(() => {
                     window.location.href = '/login.html';
