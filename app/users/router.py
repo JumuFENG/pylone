@@ -1,14 +1,27 @@
 from fastapi import APIRouter, HTTPException, Depends
-from .manager import fastapi_users, auth_backend, current_superuser
-from .manager import get_user_manager, get_user_db
+from .manager import (
+    fastapi_users,
+    cookie_auth_backend,
+    bearer_auth_backend,
+    current_active_user,
+    current_superuser,
+    get_user_manager,
+    get_user_db
+)
 from .schemas import UserRead, UserCreate, UserUpdate
 from .models import User
 
 router = APIRouter()
 
 router.include_router(
-    fastapi_users.get_auth_router(auth_backend),
+    fastapi_users.get_auth_router(cookie_auth_backend),
     prefix="/auth/jwt",
+    tags=["auth"],
+)
+
+router.include_router(
+    fastapi_users.get_auth_router(bearer_auth_backend),
+    prefix="/auth/bearer",
     tags=["auth"],
 )
 
@@ -18,22 +31,21 @@ router.include_router(
     tags=["auth"],
 )
 
-router.include_router(
-    fastapi_users.get_users_router(UserRead, UserUpdate),
-    prefix="/users",
-    tags=["users"],
-)
+@router.get("/users/me", response_model=UserRead, tags=["users"])
+async def users_me(user: User = Depends(current_active_user)):
+    """获取当前用户信息"""
+    return user
 
 
-# 添加保护超级管理员的中间件检查
 @router.patch("/users/{user_id}", response_model=UserRead, tags=["users"])
 async def update_user_protected(
     user_id: int,
     user_update: UserUpdate,
-    current_user: User = Depends(current_superuser)
+    current_user: User = Depends(current_active_user)
 ):
     """更新用户信息（保护 ID 为 1 的超级管理员）"""
-    if user_id == 1:
+    # 保护超级管理员
+    if user_id == 1 and current_user.id != 1:
         raise HTTPException(
             status_code=403,
             detail="无法修改超级管理员账户"
@@ -42,7 +54,7 @@ async def update_user_protected(
     if user_id != current_user.id and not current_user.is_superuser:
         raise HTTPException(
             status_code=403,
-            detail="普通用户无法修改其他用户信息"
+            detail="无权修改其他用户信息"
         )
 
     async for user_db in get_user_db():
@@ -60,7 +72,7 @@ async def delete_user_protected(
     user_id: int,
     current_user: User = Depends(current_superuser)
 ):
-    """删除用户（保护 ID 为 1 的超级管理员）"""
+    """删除用户（仅管理员，保护 ID 为 1 的超级管理员）"""
     if user_id == 1:
         raise HTTPException(
             status_code=403,
@@ -70,7 +82,7 @@ async def delete_user_protected(
     if user_id != current_user.id and not current_user.is_superuser:
         raise HTTPException(
             status_code=403,
-            detail="普通用户无法删除其他用户"
+            detail="无权删除其他用户信息"
         )
 
     async for user_db in get_user_db():
