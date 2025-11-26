@@ -16,58 +16,66 @@
             </div>
         </div>
         
-        <div id="alert" style="display: none;"></div>
+        <div id="alert" style="display: none; position: fixed; top: 100px; left: 50%; transform: translateX(-50%);"></div>
         
         <div id="loading" class="loading">加载中...</div>
         
         <div id="userInfo" style="display: none;">
+            <div class="nav-links hover-actions" style="display: flex;flex-direction: row-reverse;">
+                <a id="editBtn" href="#" onclick="toggleEdit()">编辑</a>
+                <a id="saveBtn" href="#" style="display: none;" onclick="saveChanges()">保存</a>
+                <a id="cancelBtn" href="#" style="color: #aaa; display: none;" onclick="cancelEdit()">取消</a>
+            </div>
+            
             <div class="user-info">
-                <p><strong>用户ID:</strong> <span id="userId"></span></p>
-                <p><strong>邮箱:</strong> <span id="userEmail"></span></p>
-                <p><strong>用户名:</strong> <span id="userName"></span></p>
+                <p class="d-flex"><strong>用户ID:</strong> <span id="userId" style="width: 250px;"></span></p>
+                <p class="d-flex">
+                    <strong>邮箱:</strong> 
+                    <span id="userEmailDisplay" style="width: 250px;"></span>
+                    <input type="email" id="userEmailInput" style="display: none; width: 250px;">
+                </p>
+                <p class="d-flex">
+                    <strong>用户名:</strong> 
+                    <span id="userNameDisplay" style="width: 250px;"></span>
+                    <input type="text" id="userNameInput" style="display: none; width: 250px;">
+                </p>
+                <p id="passwordRow" class="d-flex" style="display: none;">
+                    <strong>新密码:</strong>
+                    <input type="password" id="userPasswordInput" placeholder="至少6位,留空则不修改" minlength="6" style="width: 250px;">
+                </p>
                 <p><strong>账号状态:</strong> <span id="userActive"></span></p>
                 <p><strong>邮箱验证:</strong> <span id="userVerified"></span></p>
                 <p><strong>管理员权限:</strong> <span id="userSuperuser"></span></p>
             </div>
-            
-            <h3>更新信息</h3>
-            <form id="updateForm">
-                <div class="form-group">
-                    <label for="newUsername">新用户名</label>
-                    <input type="text" id="newUsername" name="newUsername">
-                </div>
-                <div class="form-group">
-                    <label for="newPassword">新密码（留空则不修改）</label>
-                    <input type="password" id="newPassword" name="newPassword" minlength="6">
-                </div>
-                <button type="submit" class="btn">更新信息</button>
-            </form>
         </div>
     </div>
 
     <script src="/static/js/auth.js"></script>
     <script>
+        let currentUser = null;
+        let isEditing = false;
+
         async function loadUserInfo() {
             try {
-                const user = await getCurrentUser();
+                currentUser = await getCurrentUser();
                 
-                document.getElementById('userId').textContent = user.id;
-                document.getElementById('userEmail').textContent = user.email;
-                document.getElementById('userName').textContent = user.username || '未设置';
-                document.getElementById('userActive').innerHTML = user.is_active 
+                document.getElementById('userId').textContent = currentUser.id;
+                document.getElementById('userEmailDisplay').textContent = currentUser.email;
+                document.getElementById('userEmailInput').value = currentUser.email;
+                document.getElementById('userNameDisplay').textContent = currentUser.username || '未设置';
+                document.getElementById('userNameInput').value = currentUser.username || '';
+                document.getElementById('userActive').innerHTML = currentUser.is_active 
                     ? '<span class="badge badge-success">激活</span>' 
                     : '<span class="badge badge-danger">未激活</span>';
-                document.getElementById('userVerified').innerHTML = user.is_verified 
+                document.getElementById('userVerified').innerHTML = currentUser.is_verified 
                     ? '<span class="badge badge-success">已验证</span>' 
                     : '<span class="badge badge-warning">未验证</span>';
-                document.getElementById('userSuperuser').innerHTML = user.is_superuser 
+                document.getElementById('userSuperuser').innerHTML = currentUser.is_superuser 
                     ? '<span class="badge badge-success">是</span>' 
                     : '<span class="badge badge-danger">否</span>';
                 
-                document.getElementById('newUsername').value = user.username || '';
-                
                 // 如果是管理员，显示用户管理链接
-                if (user.is_superuser) {
+                if (currentUser.is_superuser) {
                     const adminLink = document.getElementById('adminLink');
                     adminLink.style.display = 'inline';
                     adminLink.href = '/admin.html';
@@ -81,14 +89,51 @@
             }
         }
 
-        document.getElementById('updateForm').addEventListener('submit', async (e) => {
-            e.preventDefault();
+        function toggleEdit() {
+            isEditing = true;
             
-            const newUsername = document.getElementById('newUsername').value;
-            const newPassword = document.getElementById('newPassword').value;
+            // 切换按钮显示
+            document.getElementById('editBtn').style.display = 'none';
+            document.getElementById('saveBtn').style.display = 'inline-block';
+            document.getElementById('cancelBtn').style.display = 'inline-block';
+            
+            // 切换显示/输入模式
+            document.getElementById('userEmailDisplay').style.display = 'none';
+            document.getElementById('userEmailInput').style.display = 'inline-block';
+            document.getElementById('userNameDisplay').style.display = 'none';
+            document.getElementById('userNameInput').style.display = 'inline-block';
+            document.getElementById('passwordRow').style.display = 'flex';
+        }
+
+        function cancelEdit() {
+            isEditing = false;
+            
+            // 切换按钮显示
+            document.getElementById('editBtn').style.display = 'inline-block';
+            document.getElementById('saveBtn').style.display = 'none';
+            document.getElementById('cancelBtn').style.display = 'none';
+            
+            // 恢复原始值
+            document.getElementById('userEmailInput').value = currentUser.email;
+            document.getElementById('userNameInput').value = currentUser.username || '';
+            document.getElementById('userPasswordInput').value = '';
+            
+            // 切换显示/输入模式
+            document.getElementById('userEmailDisplay').style.display = 'inline';
+            document.getElementById('userEmailInput').style.display = 'none';
+            document.getElementById('userNameDisplay').style.display = 'inline';
+            document.getElementById('userNameInput').style.display = 'none';
+            document.getElementById('passwordRow').style.display = 'none';
+        }
+
+        async function saveChanges() {
+            const newEmail = document.getElementById('userEmailInput').value;
+            const newUsername = document.getElementById('userNameInput').value;
+            const newPassword = document.getElementById('userPasswordInput').value;
             
             const updateData = {};
-            if (newUsername) updateData.username = newUsername;
+            if (newEmail && newEmail !== currentUser.email) updateData.email = newEmail;
+            if (newUsername && newUsername !== currentUser.username) updateData.username = newUsername;
             if (newPassword) {
                 if (newPassword.length < 6) {
                     showError('密码长度至少为6位');
@@ -98,13 +143,13 @@
             }
             
             if (Object.keys(updateData).length === 0) {
-                showError('请至少修改一项信息');
+                showError('没有修改任何信息');
+                cancelEdit();
                 return;
             }
             
             try {
-                const user = await getCurrentUser();
-                await updateUser(user.id, updateData);
+                await updateUser(currentUser.id, updateData);
                 showSuccess('更新成功！');
                 setTimeout(() => {
                     location.reload();
@@ -112,7 +157,7 @@
             } catch (error) {
                 showError(error.message);
             }
-        });
+        }
 
         loadUserInfo();
     </script>

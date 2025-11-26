@@ -125,15 +125,20 @@ input:focus {
 }
 
 .user-info {
-    background: #f8f9fa;
     padding: 20px;
     border-radius: 5px;
-    margin-bottom: 20px;
+    margin-bottom: 10px;
 }
 
 .user-info p {
     margin: 10px 0;
     color: #555;
+}
+
+.d-flex {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
 }
 
 .user-info strong {
@@ -144,8 +149,8 @@ input:focus {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 30px;
-    padding-bottom: 20px;
+    margin-bottom: 10px;
+    padding-bottom: 5px;
     border-bottom: 2px solid #e0e0e0;
 }
 
@@ -203,6 +208,37 @@ tr:hover {
 .badge-warning {
     background: #fff3cd;
     color: #856404;
+}
+
+.hover-actions {
+    opacity: 0;
+    transition: opacity 0.2s;
+}
+
+#userInfo:hover .hover-actions {
+    opacity: 1;
+}
+
+#userTableBody tr {
+    position: relative;
+}
+
+.row-actions {
+    position: absolute;
+    right: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    display: none;
+    white-space: nowrap;
+    z-index: 10;
+}
+
+#userTableBody tr:hover .row-actions {
+    display: block;
+}
+
+.row-actions button {
+    margin: 0 3px;
 }
 
 .action-btn {

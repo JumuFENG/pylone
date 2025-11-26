@@ -16,7 +16,7 @@
             </div>
         </div>
 
-        <div id="alert" style="display: none;"></div>
+        <div id="alert" style="display: none; position: fixed; top: 100px; left: 50%; transform: translateX(-50%);"></div>
 
         <div id="loading" class="loading">加载中...</div>
 
@@ -30,7 +30,6 @@
                         <th>状态</th>
                         <th>验证</th>
                         <th>管理员</th>
-                        <th>操作</th>
                     </tr>
                 </thead>
                 <tbody id="userTableBody">
@@ -114,8 +113,8 @@
                         <td>${user.is_active ? '<span class="badge badge-success">激活</span>' : '<span class="badge badge-danger">未激活</span>'}</td>
                         <td>${user.is_verified ? '<span class="badge badge-success">已验证</span>' : '<span class="badge badge-warning">未验证</span>'}</td>
                         <td>${user.is_superuser ? '<span class="badge badge-success">是</span>' : '<span class="badge badge-danger">否</span>'}</td>
-                        <td>
-                            ${isSuperAdmin ? '<span style="color: #999;">受保护的超级管理员</span>' : `
+                        ${isSuperAdmin ? '<div class="row-actions"><span style="color: #999;">受保护的超级管理员</span></div>' : `
+                            <div class="row-actions">
                                 <button class="action-btn action-btn-edit" onclick="toggleUserStatus(${user.id}, ${!user.is_active})">
                                     ${user.is_active ? '禁用' : '启用'}
                                 </button>
@@ -123,8 +122,8 @@
                                     ${user.is_superuser ? '取消管理员' : '设为管理员'}
                                 </button>
                                 <button class="action-btn action-btn-delete" onclick="confirmDelete(${user.id}, '${user.email}')">删除</button>
-                            `}
-                        </td>
+                            </div>
+                        `}
                     `;
                     tbody.appendChild(row);
                 });
