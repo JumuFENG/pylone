@@ -25,11 +25,13 @@
                 <thead>
                     <tr>
                         <th>ID</th>
-                        <th>邮箱</th>
                         <th>用户名</th>
+                        <th>邮箱</th>
                         <th>状态</th>
                         <th>验证</th>
                         <th>管理员</th>
+                        <th>实盘</th>
+                        <th>主账户</th>
                     </tr>
                 </thead>
                 <tbody id="userTableBody">
@@ -54,7 +56,7 @@
                         </div>
                     </div>
                     <div style="display: flex;">
-                        <div style="display: flex; gap: 55px; align-items: center; margin-bottom: 15px;width: 83%;">
+                        <div style="display: flex; gap: 35px; align-items: center; margin-bottom: 15px;width: 86%;">
                             <label style="margin: 0;">
                                 <input type="checkbox" id="newUserIsActive" name="is_active" checked>
                                 激活账户
@@ -67,9 +69,22 @@
                                 <input type="checkbox" id="newUserIsSuperuser" name="is_superuser">
                                 管理员权限
                             </label>
+                            <label style="margin: 0;">
+                                资金类型
+                                <select name="realcash" id="newUserRealcash" style="width: auto;">
+                                    <option value="1" selected>实盘</option>
+                                    <option value="0" >模拟盘</option>
+                                </select>
+                            </label>
+                            <label style="margin: 0;">
+                                选择父账户
+                                <select name="parent" id="newUserParent" style="width: auto;">
+                                    <option value="" selected>无</option>
+                                </select>
+                            </label>
                         </div>
                         <div>
-                            <button type="submit" class="action-btn action-btn-edit" style="margin-left: auto;">创建用户</button>
+                            <button type="submit" class="action-btn action-btn-edit">创建用户</button>
                         </div>
                     </div>
                 </form>
@@ -100,7 +115,11 @@
             try {
                 const users = await getAllUsers();
                 const tbody = document.getElementById('userTableBody');
+                const parentSelect = document.getElementById('newUserParent');
                 tbody.innerHTML = '';
+                while (parentSelect.options.length > 1) {
+                    parentSelect.remove(1);
+                }
 
                 users.forEach(user => {
                     const row = document.createElement('tr');
@@ -108,17 +127,19 @@
 
                     row.innerHTML = `
                         <td>${user.id}</td>
-                        <td>${user.email}</td>
                         <td>${user.username || '-'}</td>
+                        <td>${user.email}</td>
                         <td>${user.is_active ? '<span class="badge badge-success">激活</span>' : '<span class="badge badge-danger">未激活</span>'}</td>
                         <td>${user.is_verified ? '<span class="badge badge-success">已验证</span>' : '<span class="badge badge-warning">未验证</span>'}</td>
                         <td>${user.is_superuser ? '<span class="badge badge-success">是</span>' : '<span class="badge badge-danger">否</span>'}</td>
+                        <td>${user.realcash ? '<span class="badge badge-success">实盘</span>' : '<span class="badge badge-danger">模拟</span>'}</td>
+                        <td>${user.parent_id || '<span class="badge badge-success">是</span>'}</td>
                         ${isSuperAdmin ? '<div class="row-actions"><span style="color: #999;">受保护的超级管理员</span></div>' : `
                             <div class="row-actions">
                                 <button class="action-btn action-btn-edit" onclick="toggleUserStatus(${user.id}, ${!user.is_active})">
                                     ${user.is_active ? '禁用' : '启用'}
                                 </button>
-                                <button class="action-btn action-btn-edit" onclick="toggleSuperuser(${user.id}, ${!user.is_superuser})">
+                                <button class="action-btn action-btn-edit" style="display: ${user.parent_id ? 'none' : ''}" onclick="toggleSuperuser(${user.id}, ${!user.is_superuser})">
                                     ${user.is_superuser ? '取消管理员' : '设为管理员'}
                                 </button>
                                 <button class="action-btn action-btn-delete" onclick="confirmDelete(${user.id}, '${user.email}')">删除</button>
@@ -126,6 +147,13 @@
                         `}
                     `;
                     tbody.appendChild(row);
+
+                    if (!user.parent_id) {
+                        const option = document.createElement('option');
+                        option.value = user.id;
+                        option.textContent = user.username || user.id;
+                        parentSelect.appendChild(option);
+                    }
                 });
 
                 document.getElementById('loading').style.display = 'none';
@@ -177,6 +205,8 @@
             const is_active = document.getElementById('newUserIsActive').checked;
             const is_verified = document.getElementById('newUserIsVerified').checked;
             const is_superuser = document.getElementById('newUserIsSuperuser').checked;
+            const realcash = parseInt(document.getElementById('newUserRealcash').value);
+            const parent_id = parseInt(document.getElementById('newUserParent').value);
 
             try {
                 const userData = {
@@ -185,28 +215,15 @@
                     password,
                     is_active,
                     is_verified,
-                    is_superuser
+                    is_superuser,
+                    realcash
                 };
 
-                await register(email, password, username);
-
-                // 如果需要设置特殊权限，需要更新用户
-                if (is_superuser || is_verified || !is_active) {
-                    // 获取刚创建的用户
-                    const users = await getAllUsers();
-                    const newUser = users.find(u => u.email === email);
-
-                    if (newUser) {
-                        const updateData = {};
-                        if (is_superuser) updateData.is_superuser = true;
-                        if (is_verified) updateData.is_verified = true;
-                        if (!is_active) updateData.is_active = false;
-
-                        if (Object.keys(updateData).length > 0) {
-                            await updateUser(newUser.id, updateData);
-                        }
-                    }
+                if (parent_id) {
+                    userData.parent_id = parent_id;
                 }
+
+                await register(userData);
 
                 showSuccess('用户创建成功！');
                 document.getElementById('createUserForm').reset();

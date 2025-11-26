@@ -1,5 +1,7 @@
+from typing import List, Optional
 from fastapi import APIRouter, HTTPException, Depends
-from typing import Optional
+from sqlalchemy import select
+from app.db import async_session_maker
 from .manager import (
     fastapi_users,
     cookie_auth_backend,
@@ -95,3 +97,11 @@ async def delete_user_protected(
 
             await user_manager.delete(user, request=None)
             return
+
+@router.get("/users/subaccounts", response_model=List[UserRead], tags=["users"])
+async def get_subaccounts(user=Depends(current_superuser)):
+    """获取子账户列表"""
+    async with async_session_maker() as session:
+        result = await session.execute(select(User).where(User.parent_id == user.id))
+        users = result.scalars().all()
+    return users

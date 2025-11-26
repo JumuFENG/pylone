@@ -8,44 +8,81 @@
 </head>
 <body>
     <div class="container">
+        <div id="alert" style="display: none; position: fixed; top: 100px; left: 50%; transform: translateX(-50%);"></div>
+        <div id="loading" class="loading">加载中...</div>
         <div class="nav">
-            <h2>个人信息</h2>
+            <div ></div>
             <div class="nav-links">
                 <a href="#" id="adminLink" style="display: none;">用户管理</a>
                 <a href="#" onclick="logout()">退出登录</a>
             </div>
         </div>
-        
-        <div id="alert" style="display: none; position: fixed; top: 100px; left: 50%; transform: translateX(-50%);"></div>
-        
-        <div id="loading" class="loading">加载中...</div>
-        
-        <div id="userInfo" style="display: none;">
-            <div class="nav-links hover-actions" style="display: flex;flex-direction: row-reverse;">
-                <a id="editBtn" href="#" onclick="toggleEdit()">编辑</a>
-                <a id="saveBtn" href="#" style="display: none;" onclick="saveChanges()">保存</a>
-                <a id="cancelBtn" href="#" style="color: #aaa; display: none;" onclick="cancelEdit()">取消</a>
+        <div style="display: flex; gap: 15px;">
+            <div style="width: 25%;">
+                <h2 style="margin-bottom: auto;">个人信息</h2>
+
+                <div id="userInfo" style="display: none;">
+                    <div class="nav-links hover-actions" style="display: flex;flex-direction: row-reverse;">
+                        <a id="editBtn" href="#" onclick="toggleEdit()">修改密码</a>
+                        <a id="saveBtn" href="#" style="display: none;" onclick="saveChanges()">保存</a>
+                        <a id="cancelBtn" href="#" style="color: #aaa; display: none;" onclick="cancelEdit()">取消</a>
+                    </div>
+
+                    <div class="user-info" style="padding-top: 5px;">
+                        <p class="d-flex"><strong>用户ID:</strong> <span id="userId" style="width: 250px;"></span></p>
+                        <p class="d-flex"><strong>邮箱:</strong> <span id="userEmailDisplay" style="width: 250px;"></span></p>
+                        <p class="d-flex"><strong>用户名:</strong> <span id="userNameDisplay" style="width: 250px;"></span></p>
+                        <p id="passwordRow" class="d-flex" style="display: none;">
+                            <strong>新密码:</strong>
+                            <input type="password" id="userPasswordInput" placeholder="至少6位,留空则不修改" minlength="6" style="width: 250px;">
+                        </p>
+                        <p><strong>账号状态:</strong> <span id="userActive"></span></p>
+                        <p><strong>邮箱验证:</strong> <span id="userVerified"></span></p>
+                        <p><strong>管理员权限:</strong> <span id="userSuperuser"></span></p>
+                    </div>
+                </div>
             </div>
-            
-            <div class="user-info">
-                <p class="d-flex"><strong>用户ID:</strong> <span id="userId" style="width: 250px;"></span></p>
-                <p class="d-flex">
-                    <strong>邮箱:</strong> 
-                    <span id="userEmailDisplay" style="width: 250px;"></span>
-                    <input type="email" id="userEmailInput" style="display: none; width: 250px;">
-                </p>
-                <p class="d-flex">
-                    <strong>用户名:</strong> 
-                    <span id="userNameDisplay" style="width: 250px;"></span>
-                    <input type="text" id="userNameInput" style="display: none; width: 250px;">
-                </p>
-                <p id="passwordRow" class="d-flex" style="display: none;">
-                    <strong>新密码:</strong>
-                    <input type="password" id="userPasswordInput" placeholder="至少6位,留空则不修改" minlength="6" style="width: 250px;">
-                </p>
-                <p><strong>账号状态:</strong> <span id="userActive"></span></p>
-                <p><strong>邮箱验证:</strong> <span id="userVerified"></span></p>
-                <p><strong>管理员权限:</strong> <span id="userSuperuser"></span></p>
+            <div style="width: 75%;">
+                <div id="userList" style="display: none;">
+                    <h3 style="margin-bottom: auto;">子账户列表</h2>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>用户名</th>
+                                <th>邮箱</th>
+                                <th>状态</th>
+                                <th>验证</th>
+                                <th>实盘</th>
+                            </tr>
+                        </thead>
+                        <tbody id="userTableBody">
+                        </tbody>
+                    </table>
+                </div>
+
+                <div id="createUser" style="margin-top: 30px; padding-top: 30px; border-top: 2px solid #e0e0e0;">
+                    <h3>创建子账户</h3>
+                    <form id="createUserForm" onsubmit="event.preventDefault(); createSubAccount();">
+                        <div style="display: flex; align-items: center; justify-content: space-between;">
+                            <label for="newUserUsername">用户名 *</label>
+                            <input type="text" id="newUserUsername" name="username" required="" style="width: 150px;height: 30px;">
+                            <label style="margin: 0;">
+                                资金类型
+                                <select name="realcash" id="newUserRealcash" style="width: 150px;height: 30px;">
+                                    <option value="1" selected="">实盘</option>
+                                    <option value="0">模拟盘</option>
+                                </select>
+                            </label>
+                            <label for="newUserEmail">邮箱</label>
+                            <input type="email" id="newUserEmail" name="email" style="width: 150px;height: 30px;" placeholder="选填,默认用户名@父账户.com">
+                            <label for="newUserPassword">密码</label>
+                            <input type="password" id="newUserPassword" name="password" minlength="6" style="width: 150px;height: 30px;" placeholder="选填,默认123456">
+                            <button type="submit" class="action-btn action-btn-edit">创建子账户</button>
+                        </div>
+                    </form>
+                </div>
+
             </div>
         </div>
     </div>
@@ -58,29 +95,32 @@
         async function loadUserInfo() {
             try {
                 currentUser = await getCurrentUser();
-                
+                loadSubAccounts();
+
                 document.getElementById('userId').textContent = currentUser.id;
                 document.getElementById('userEmailDisplay').textContent = currentUser.email;
-                document.getElementById('userEmailInput').value = currentUser.email;
                 document.getElementById('userNameDisplay').textContent = currentUser.username || '未设置';
-                document.getElementById('userNameInput').value = currentUser.username || '';
-                document.getElementById('userActive').innerHTML = currentUser.is_active 
-                    ? '<span class="badge badge-success">激活</span>' 
+                document.getElementById('userActive').innerHTML = currentUser.is_active
+                    ? '<span class="badge badge-success">激活</span>'
                     : '<span class="badge badge-danger">未激活</span>';
-                document.getElementById('userVerified').innerHTML = currentUser.is_verified 
-                    ? '<span class="badge badge-success">已验证</span>' 
+                document.getElementById('userVerified').innerHTML = currentUser.is_verified
+                    ? '<span class="badge badge-success">已验证</span>'
                     : '<span class="badge badge-warning">未验证</span>';
-                document.getElementById('userSuperuser').innerHTML = currentUser.is_superuser 
-                    ? '<span class="badge badge-success">是</span>' 
+                document.getElementById('userSuperuser').innerHTML = currentUser.is_superuser
+                    ? '<span class="badge badge-success">是</span>'
                     : '<span class="badge badge-danger">否</span>';
-                
+
                 // 如果是管理员，显示用户管理链接
                 if (currentUser.is_superuser) {
                     const adminLink = document.getElementById('adminLink');
                     adminLink.style.display = 'inline';
                     adminLink.href = '/admin.html';
                 }
-                
+
+                if (currentUser.parent_id) {
+                    document.getElementById('createUser').style.display = 'none';
+                }
+
                 document.getElementById('loading').style.display = 'none';
                 document.getElementById('userInfo').style.display = 'block';
             } catch (error) {
@@ -89,51 +129,80 @@
             }
         }
 
+        async function getSubAccounts() {
+            const response = await fetch(`${API_BASE}/users/subaccounts`, {
+                credentials: 'include'
+            });
+
+            if (!response.ok) {
+                throw new Error('获取子账户列表失败');
+            }
+
+            return await response.json();
+        }
+
+        async function loadSubAccounts() {
+            const users = await getSubAccounts();
+            const tbody = document.getElementById('userTableBody');
+            tbody.innerHTML = '';
+            users.forEach(user => {
+                const row = document.createElement('tr');
+                const isSuperAdmin = user.id === 1; // ID 为 1 的是超级管理员，受保护
+
+                row.innerHTML = `
+                    <td>${user.id}</td>
+                    <td>${user.username || '-'}</td>
+                    <td>${user.email}</td>
+                    <td>${user.is_active ? '<span class="badge badge-success">激活</span>' : '<span class="badge badge-danger">未激活</span>'}</td>
+                    <td>${user.is_verified ? '<span class="badge badge-success">已验证</span>' : '<span class="badge badge-warning">未验证</span>'}</td>
+                    <td>${user.realcash ? '<span class="badge badge-success">实盘</span>' : '<span class="badge badge-danger">模拟</span>'}</td>
+                    ${isSuperAdmin ? '<div class="row-actions"><span style="color: #999;">受保护的超级管理员</span></div>' : `
+                        <div class="row-actions">
+                            <button class="action-btn action-btn-edit" onclick="toggleUserStatus(${user.id}, ${!user.is_active})">
+                                ${user.is_active ? '禁用' : '启用'}
+                            </button>
+                            <button class="action-btn action-btn-delete" onclick="confirmDelete(${user.id}, '${user.email}')">删除</button>
+                        </div>
+                    `}
+                `;
+                tbody.appendChild(row);
+            });
+
+            document.getElementById('loading').style.display = 'none';
+            document.getElementById('userList').style.display = 'block';
+        }
+
         function toggleEdit() {
             isEditing = true;
-            
+
             // 切换按钮显示
             document.getElementById('editBtn').style.display = 'none';
             document.getElementById('saveBtn').style.display = 'inline-block';
             document.getElementById('cancelBtn').style.display = 'inline-block';
-            
+
             // 切换显示/输入模式
-            document.getElementById('userEmailDisplay').style.display = 'none';
-            document.getElementById('userEmailInput').style.display = 'inline-block';
-            document.getElementById('userNameDisplay').style.display = 'none';
-            document.getElementById('userNameInput').style.display = 'inline-block';
             document.getElementById('passwordRow').style.display = 'flex';
         }
 
         function cancelEdit() {
             isEditing = false;
-            
+
             // 切换按钮显示
             document.getElementById('editBtn').style.display = 'inline-block';
             document.getElementById('saveBtn').style.display = 'none';
             document.getElementById('cancelBtn').style.display = 'none';
-            
+
             // 恢复原始值
-            document.getElementById('userEmailInput').value = currentUser.email;
-            document.getElementById('userNameInput').value = currentUser.username || '';
             document.getElementById('userPasswordInput').value = '';
-            
+
             // 切换显示/输入模式
-            document.getElementById('userEmailDisplay').style.display = 'inline';
-            document.getElementById('userEmailInput').style.display = 'none';
-            document.getElementById('userNameDisplay').style.display = 'inline';
-            document.getElementById('userNameInput').style.display = 'none';
             document.getElementById('passwordRow').style.display = 'none';
         }
 
         async function saveChanges() {
-            const newEmail = document.getElementById('userEmailInput').value;
-            const newUsername = document.getElementById('userNameInput').value;
             const newPassword = document.getElementById('userPasswordInput').value;
-            
+
             const updateData = {};
-            if (newEmail && newEmail !== currentUser.email) updateData.email = newEmail;
-            if (newUsername && newUsername !== currentUser.username) updateData.username = newUsername;
             if (newPassword) {
                 if (newPassword.length < 6) {
                     showError('密码长度至少为6位');
@@ -141,19 +210,71 @@
                 }
                 updateData.password = newPassword;
             }
-            
+
             if (Object.keys(updateData).length === 0) {
                 showError('没有修改任何信息');
                 cancelEdit();
                 return;
             }
-            
+
             try {
                 await updateUser(currentUser.id, updateData);
                 showSuccess('更新成功！');
                 setTimeout(() => {
                     location.reload();
                 }, 1500);
+            } catch (error) {
+                showError(error.message);
+            }
+        }
+
+        async function createSubAccount() {
+            const username = document.getElementById('newUserUsername').value;
+            const email = document.getElementById('newUserEmail').value || username + '@' + currentUser.username + '.com';
+            const password = document.getElementById('newUserPassword').value || '123456';
+            const is_active = true;
+            const is_verified = true;
+            const is_superuser = false;
+            const realcash = parseInt(document.getElementById('newUserRealcash').value);
+            const parent_id = currentUser.id;
+
+            try {
+                const userData = {
+                    email,
+                    username,
+                    password,
+                    is_active,
+                    is_verified,
+                    is_superuser,
+                    realcash,
+                    parent_id
+                };
+
+                await register(userData);
+
+                // 如果需要设置特殊权限，需要更新用户
+                // if (is_superuser || is_verified || !is_active) {
+                //     // 获取刚创建的用户
+                //     const users = await getSubAccounts();
+                //     const newUser = users.find(u => u.email === email);
+
+                //     if (newUser) {
+                //         const updateData = {};
+                //         if (is_superuser) updateData.is_superuser = true;
+                //         if (is_verified) updateData.is_verified = true;
+                //         if (!is_active) updateData.is_active = false;
+                //         updateData.parent_id = parent_id;
+                //         if (realcash) updateData.realcash = realcash;
+
+                //         if (Object.keys(updateData).length > 0) {
+                //             await updateUser(newUser.id, updateData);
+                //         }
+                //     }
+                // }
+
+                showSuccess('子账户创建成功！');
+                document.getElementById('createUserForm').reset();
+                setTimeout(() => loadSubAccounts(), 1000);
             } catch (error) {
                 showError(error.message);
             }
