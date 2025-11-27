@@ -1,4 +1,5 @@
 from fastapi import APIRouter, HTTPException, Depends
+from typing import Optional
 from .manager import (
     fastapi_users,
     cookie_auth_backend,
@@ -6,7 +7,8 @@ from .manager import (
     current_active_user,
     current_superuser,
     get_user_manager,
-    get_user_db
+    get_user_db,
+    get_current_user_basic
 )
 from .schemas import UserRead, UserCreate, UserUpdate
 from .models import User
@@ -32,10 +34,16 @@ router.include_router(
 )
 
 @router.get("/users/me", response_model=UserRead, tags=["users"])
-async def users_me(user: User = Depends(current_active_user)):
-    """获取当前用户信息"""
-    return user
-
+async def users_me(
+    basic_user: User = Depends(get_current_user_basic),
+    bearer_user: User = Depends(fastapi_users.current_user(optional=True))
+):
+    if bearer_user:
+        return bearer_user
+    elif basic_user:
+        return basic_user
+    else:
+        raise HTTPException(status_code=404, detail="用户不存在")
 
 @router.patch("/users/{user_id}", response_model=UserRead, tags=["users"])
 async def update_user_protected(
@@ -77,12 +85,6 @@ async def delete_user_protected(
         raise HTTPException(
             status_code=403,
             detail="无法删除超级管理员账户"
-        )
-
-    if user_id != current_user.id and not current_user.is_superuser:
-        raise HTTPException(
-            status_code=403,
-            detail="无权删除其他用户信息"
         )
 
     async for user_db in get_user_db():

@@ -6,10 +6,11 @@ from fastapi_users.authentication import (
     JWTStrategy
 )
 from fastapi_users.db import SQLAlchemyUserDatabase
-from sqlalchemy import select
 from typing import AsyncGenerator, Optional
 from sqlalchemy.ext.asyncio import AsyncSession
-from fastapi import Request
+from sqlalchemy import select
+from fastapi import Depends
+from fastapi.security import HTTPBasic, HTTPBasicCredentials
 
 from app.lofig import Config, logger
 from app.db import async_session_maker
@@ -79,6 +80,7 @@ class UserManager(BaseUserManager[User, int]):
                 credentials.password, user.hashed_password
             )
             if not verified:
+                logger.error(f"Authentication error: {credentials.username} not verified!")
                 return None
 
             # 如果密码哈希需要更新（例如算法升级）
@@ -96,6 +98,18 @@ async def get_user_manager():
     async for user_db in get_user_db():
         yield UserManager(user_db)
 
+# Basic Auth 支持（auto_error=False 允许在没有 Basic Auth 时返回 None 而不是抛出 401）
+async def get_current_user_basic(
+    credentials: HTTPBasicCredentials = Depends(HTTPBasic(auto_error=False))
+) -> User:
+    """
+    使用 Basic Auth 认证用户
+    """
+    if credentials is None:
+        return None
+
+    async for user_manager in get_user_manager():
+        return await user_manager.authenticate(credentials)
 
 fastapi_users = FastAPIUsers[User, int](
     get_user_manager,
