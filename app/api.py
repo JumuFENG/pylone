@@ -1,6 +1,8 @@
-from fastapi import APIRouter, Query, Form, Body, Depends, HTTPException, Request
+from fastapi import APIRouter, Query, HTTPException
+from typing import Optional
 import requests
 import base64
+from app import PostParams, pparam_doc
 from app.hu import img_to_text
 
 
@@ -102,11 +104,15 @@ async def http_request_get(
 ):
     return get_http_request(url, host, referer)
 
-@router.post("/get")
+@router.post("/get", openapi_extra=pparam_doc([
+    ("url", "string", "url", True),
+    ("host", "string", "host", False),
+    ("referer", "string", "referer", False)
+]))
 async def http_request_post(
-    url: str = Body(...),
-    host: str = Body(None, min_length=1, max_length=255),
-    referer: str = Body(None, min_length=1, max_length=255)
+    url: str = PostParams.create("url"),
+    host: Optional[str] = PostParams.create("host", default=None),
+    referer: Optional[str] = PostParams.create("referer", default=None)
 ):
     return get_http_request(url, host, referer)
 
@@ -126,20 +132,6 @@ async def get_captcha(
 ):
     return recognize_image(img)
 
-@router.post("/captcha")
-async def post_captcha(request: Request):
-    content_type = request.headers.get("content-type", "")
-
-    if "application/json" in content_type:
-        data = await request.json()
-        img = data.get("img")
-    elif "application/x-www-form-urlencoded" in content_type or "multipart/form-data" in content_type:
-        form = await request.form()
-        img = form.get("img")
-    else:
-        raise HTTPException(status_code=400, detail="Unsupported content type. Use application/json or form data.")
-
-    if not img:
-        raise HTTPException(status_code=400, detail="No img specified.")
-
+@router.post("/captcha", openapi_extra=pparam_doc([("img", "string", "base64 string", True)]))
+async def post_captcha(img: str = PostParams.create("img")):
     return recognize_image(img)
