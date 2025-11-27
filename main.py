@@ -5,6 +5,7 @@ from fastapi.responses import RedirectResponse
 from app.lofig import Config, logger
 from app.users.router import router as users_router
 from app.admin.router import router as admin_router
+from app.api import router as api_router
 
 
 cfg = Config.client_config()
@@ -12,6 +13,7 @@ app = FastAPI(title=cfg.get('app_name', 'pyswee'))
 
 app.include_router(users_router)
 app.include_router(admin_router)
+app.include_router(api_router)
 
 # 挂载静态文件
 app.mount("/static", StaticFiles(directory="static"), name="static")
