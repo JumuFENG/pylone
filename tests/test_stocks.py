@@ -10,14 +10,14 @@ import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from app.lofig import Config
-from app.stock.manager import AllStocks, AllIndexes
+from app.stock.manager import AllStocks
 
 class TestIndex(unittest.IsolatedAsyncioTestCase):
     async def test_load_index(self):
-        await AllIndexes.load_info('sh000001')
+        await AllStocks.remove('sz399001')
 
     async def test_update_kline_data(self):
-        await AllIndexes.update_kline_data()
+        await AllStocks.update_kline_data()
 
     async def test_np_convert(self):
         from app.stock.h5 import KLineStorage
@@ -36,5 +36,5 @@ class TestIndex(unittest.IsolatedAsyncioTestCase):
 if __name__ == '__main__':
     # unittest.main()
     suite = unittest.TestSuite()
-    suite.addTest(TestIndex('test_update_kline_data'))
+    suite.addTest(TestIndex('test_load_index'))
     unittest.TextTestRunner().run(suite)

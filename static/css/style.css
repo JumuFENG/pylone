@@ -153,6 +153,10 @@ select:focus {
     align-items: center;
 }
 
+.d-none {
+    display: none;
+}
+
 .user-info strong {
     color: #333;
 }
@@ -228,6 +232,10 @@ tr:hover {
 }
 
 #userInfo:hover .hover-actions {
+    opacity: 1;
+}
+
+.stock-item:hover .hover-actions {
     opacity: 1;
 }
 

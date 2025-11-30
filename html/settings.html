@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>设置 - 股票管理系统</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    <style>
+        .settings-section {
+            background: white;
+            border-radius: 8px;
+            padding: 25px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        .section-title {
+            font-size: 18px;
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #667eea;
+        }
+
+        .search-box {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        .search-box input {
+            flex: 1;
+        }
+
+        .search-box button {
+            width: auto;
+            padding: 10px 20px;
+        }
+
+        .stock-list {
+            max-height: 400px;
+            overflow-y: auto;
+        }
+
+        .stock-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px;
+            border: 1px solid #e0e0e0;
+            border-radius: 5px;
+            margin-bottom: 10px;
+            transition: all 0.2s;
+        }
+
+        .stock-item:hover {
+            background: #f8f9fa;
+            border-color: #667eea;
+        }
+
+        .stock-info {
+            flex: 1;
+        }
+
+        .stock-code {
+            font-weight: 600;
+            color: #333;
+            margin-right: 10px;
+        }
+
+        .stock-name {
+            color: #666;
+        }
+
+        .btn-small {
+            width: auto;
+            padding: 6px 15px;
+            font-size: 14px;
+        }
+
+        .btn-remove {
+            background: #dc3545;
+        }
+
+        .btn-add {
+            background: #28a745;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 40px;
+            color: #999;
+        }
+
+        .search-results {
+            max-height: 300px;
+            overflow-y: auto;
+            border: 1px solid #e0e0e0;
+            border-radius: 5px;
+            margin-top: 10px;
+        }
+
+        .placeholder-section {
+            min-height: 150px;
+            background: #f8f9fa;
+            border: 2px dashed #d0d0d0;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #999;
+            font-style: italic;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="nav">
+            <h2>设置</h2>
+            <div class="nav-links">
+                <a href="/html/index.html">首页</a>
+                <a href="/html/profile.html">个人中心</a>
+                <a href="#" onclick="logout()">退出</a>
+            </div>
+        </div>
+
+        <div id="alert" style="display: none; position: fixed; top: 100px; left: 50%; transform: translateX(-50%);"></div>
+        <div style="display: flex;">
+
+            <!-- 股票管理区域 -->
+            <div class="settings-section" style="width: 60%;">
+                <div class="section-title">股票列表</div>
+
+                <div class="search-box">
+                    <input type="text" id="searchInput" placeholder="输入股票代码或名称搜索..." oninput="searchStock()" />
+                    <button class="btn btn-small" onclick="searchStock()">搜索</button>
+                </div>
+
+                <div id="searchResults" class="search-results d-none"></div>
+
+                <div id="stockList" class="stock-list">
+                    <div class="loading">加载中...</div>
+                </div>
+            </div>
+
+            <!-- 预留的其他设置区域 -->
+            <div class="settings-section">
+                <div class="section-title">其他设置</div>
+                <div class="placeholder-section">
+                    此区域预留用于未来添加更多设置选项
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/js/auth.js"></script>
+    <script>
+        let allStocks = [];
+        let searchResults = [];
+
+        // 页面加载时获取用户股票列表
+        async function loadAllStocks() {
+            try {
+                currentUser = await getCurrentUser();
+
+                const response = await fetch('/stock/allstockinfo', {
+                    credentials: 'include'
+                });
+
+                if (response.ok) {
+                    allStocks = await response.json();
+                    renderStockList();
+                } else if (response.status === 401) {
+                    window.location.href = '/html/login.html';
+                } else {
+                    throw new Error('加载失败');
+                }
+            } catch (error) {
+                document.getElementById('stockList').innerHTML =
+                    '<div class="empty-state">加载股票列表失败</div>';
+            }
+        }
+
+        // 渲染股票列表
+        function renderStockList() {
+            const stockList = document.getElementById('stockList');
+
+            if (allStocks.length === 0) {
+                stockList.innerHTML = '<div class="empty-state">暂无股票，请搜索添加</div>';
+                return;
+            }
+
+            stockList.innerHTML = allStocks.map(stock => `
+                <div class="stock-item">
+                    <div class="stock-info">
+                        <span class="stock-code">${stock.code}</span>
+                        <span class="stock-name">${stock.name || '未知'}</span>
+                        <span class="stock-code">${stock.typekind || '未知'}</span>
+                    </div>
+                    <div class="hover-actions">
+                        <button class="btn btn-small btn-remove" onclick="removeStock('${stock.code}')">
+                            移除
+                        </button>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        // 搜索股票
+        async function searchStock() {
+            const keyword = document.getElementById('searchInput').value.trim();
+            if (!keyword || keyword.length < 3) {
+                return;
+            }
+
+            try {
+                const response = await fetch(`/admin/search?keyword=${encodeURIComponent(keyword)}`, {
+                    credentials: 'include'
+                });
+
+                if (response.ok) {
+                    searchResults = await response.json();
+                    renderSearchResults();
+                } else {
+                    throw new Error('搜索失败');
+                }
+            } catch (error) {
+                console.error(error);
+            }
+        }
+
+        // 渲染搜索结果
+        function renderSearchResults() {
+            const searchResultsList = document.getElementById('searchResults');
+
+            if (searchResults.length === 0) {
+                searchResultsList.innerHTML = '<div class="empty-state">未找到相关股票</div>';
+                searchResultsList.classList.remove('d-none');
+                return;
+            }
+
+            searchResultsList.innerHTML = searchResults.map(stock => {
+                const isAdded = allStocks.some(s => s.code === stock.code);
+                return `
+                    <div class="stock-item">
+                        <div class="stock-info">
+                            <span class="stock-code">${stock.code}</span>
+                            <span class="stock-name">${stock.name}</span>
+                            <span class="stock-code">${stock.typekind}</span>
+                        </div>
+                        <div class="hover-actions">
+                            ${isAdded ?
+                                '<span style="color: #28a745;">已添加</span>' :
+                                `<button class="btn btn-small btn-add" onclick="addStock('${stock.code}')">添加</button>`
+                            }
+                        </div>
+                    </div>
+                `;
+            }).join('');
+            searchResultsList.classList.remove('d-none');
+            searchResultsList.onkeydown = function(e) {
+                if (e.key === 'Escape') {
+                    searchResultsList.classList.add('d-none');
+                }
+            };
+        }
+
+        // 添加股票
+        async function addStock(code, name) {
+            try {
+                const searchedStock = searchResults.find(s => s.code === code);
+                if (!searchedStock) {
+                    throw new Error('股票未找到');
+                }
+                const response = await fetch('/admin/addstock', {
+                    method: 'POST',
+                    credentials: 'include',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(searchedStock)
+                });
+
+                if (response.ok) {
+                    showSuccess('添加成功');
+                    loadAllStocks();
+                    document.getElementById('searchResults').classList.add('d-none');
+                    document.getElementById('searchInput').value = '';
+                } else {
+                    const error = await response.json();
+                    throw new Error(error.detail || '添加失败');
+                }
+            } catch (error) {
+                showError('添加失败：' + error.message);
+            }
+        }
+
+        // 移除股票
+        async function removeStock(code) {
+            if (!confirm('确定要移除这只股票吗？')) {
+                return;
+            }
+
+            try {
+                const response = await fetch('/admin/removestock', {
+                    method: 'POST',
+                    credentials: 'include',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        code: code
+                    })
+                });
+
+                if (response.ok) {
+                    showSuccess('移除成功');
+                    loadAllStocks();
+                } else {
+                    throw new Error('移除失败');
+                }
+            } catch (error) {
+                showError('移除失败，请重试');
+            }
+        }
+
+        // 退出登录
+        function logout() {
+            window.location.href = '/html/login.html';
+        }
+
+        // 支持回车搜索
+        document.addEventListener('DOMContentLoaded', function() {
+            document.getElementById('searchInput').addEventListener('keypress', function(e) {
+                if (e.key === 'Enter') {
+                    searchStock();
+                }
+            });
+            loadAllStocks();
+        });
+    </script>
+</body>
+</html>

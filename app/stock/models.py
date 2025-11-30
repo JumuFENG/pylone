@@ -8,16 +8,9 @@ class MdlAllStock(Base):
     id = Column(Integer, primary_key=True)
     code = Column(String(20), nullable=False)
     name = Column(String(255), nullable=False)
-    typekind = Column(String(20), nullable=False)
-    setup_date = Column(String(20), nullable=False)
+    typekind = Column(String(20), nullable=True)
+    setup_date = Column(String(20), nullable=True)
     quit_date = Column(String(20), nullable=True)
-
-class MdlAllIndice(Base):
-    __tablename__ = "index_info"
-
-    id = Column(Integer, primary_key=True)
-    code = Column(String(20), nullable=False)
-    name = Column(String(255), nullable=False)
 
 class UserStocks(Base):
     __tablename__ = "user_stocks"

@@ -3,44 +3,72 @@ from typing import List, Tuple
 from datetime import datetime
 from sqlalchemy import select, func, update
 from sqlalchemy.exc import NoResultFound
-from sqlalchemy.future import select
+from sqlalchemy import select, delete
 import stockrt as srt
 from stockrt.sources.eastmoney import Em
 from app.hu import classproperty
 from app.lofig import logger
 from app.db import async_session_maker
-from .models import MdlAllStock, MdlAllIndice
+from .models import MdlAllStock
+from .schemas import PmStock
 from .history import Khistory as khis
 from .date import TradingDate
 
 
-class AllIndexes:
+class AllStocks:
     @classproperty
     def db(cls):
-        return MdlAllIndice
+        return MdlAllStock
 
     @classmethod
     async def read_all(cls):
         async with async_session_maker() as session:
             result = await session.execute(select(cls.db))
-            rows = result.scalars().all()
-            # 转为字典列表
-            return [row.__dict__ for row in rows]
+            return result.scalars().all()
 
     @classmethod
-    async def load_info(cls, code):
+    async def load_info(cls, stock: PmStock):
+        code = srt.get_fullcode(stock.code)
         qt = srt.quotes(code).get(code, {})
+
+        update_data = {
+            "name": qt["name"]
+        }
+        if stock.typekind:
+            update_data["typekind"] = stock.typekind
+        if stock.setup_date:
+            update_data["setup_date"] = stock.setup_date
+        if stock.quit_date:
+            update_data["quit_date"] = stock.quit_date
+
         async with async_session_maker() as session:
             result = await session.execute(
                 select(cls.db).where(cls.db.code == code)
             )
             obj = result.scalar_one_or_none()
+
             if obj:
-                obj.name = qt["name"]
+                for key, value in update_data.items():
+                    setattr(obj, key, value)
             else:
-                obj = MdlAllIndice(code=code, name=qt["name"])
+                obj = cls.db(code=code, **update_data)
                 session.add(obj)
+
             await session.commit()
+        return obj
+
+    @classmethod
+    async def remove(cls, code):
+        async with async_session_maker() as session:
+            try:
+                result = await session.execute(
+                    delete(cls.db).where(cls.db.code == code)
+                )
+                await session.commit()
+                return result.rowcount
+            except Exception as e:
+                await session.rollback()
+                raise e
 
     @classmethod
     async def index_name(cls, code):
@@ -59,21 +87,21 @@ class AllIndexes:
         """
         if not stocks_data:
             return 0, 0
-            
+
         async with async_session_maker() as session:
             try:
                 # 提取所有股票代码
                 codes = [stock['code'] for stock in stocks_data]
-                
+
                 # 批量查询已存在的记录
                 stmt = select(cls.db).where(cls.db.code.in_(codes))
                 result = await session.execute(stmt)
                 existing_map = {stock.code: stock for stock in result.scalars()}
-                
+
                 # 分离新增和更新记录
                 to_add = []
                 update_count = 0
-                
+
                 for stock_data in stocks_data:
                     code = stock_data['code']
                     if code in existing_map:
@@ -86,14 +114,14 @@ class AllIndexes:
                     else:
                         # 新增记录
                         to_add.append(cls.db(**stock_data))
-                
+
                 # 批量插入新记录
                 if to_add:
                     session.add_all(to_add)
-                
+
                 await session.commit()
                 return len(to_add), update_count
-                
+
             except Exception as e:
                 await session.rollback()
                 raise e
@@ -101,13 +129,13 @@ class AllIndexes:
     async def insert_or_update(cls, stocks_data: List[dict], chunk_size: int = 1000) -> Tuple[int, int]:
         """分块批量处理，避免内存溢出"""
         added, updated = 0, 0
-        
+
         for i in range(0, len(stocks_data), chunk_size):
             chunk = stocks_data[i:i + chunk_size]
             result = await cls.bulk_upsert_stocks(chunk)
             added += result[0]
             updated += result[1]
-        
+
         return added, updated
 
     @classmethod
@@ -167,11 +195,6 @@ class AllIndexes:
                 khis.save_kline(c, kltype, klines[c])
         srt.set_array_format(ofmt)
         return [c for c in sum(fixlens.values(), []) if c not in klines or len(klines[c]) == 0 or TradingDate.calc_trading_days(klines[c][-1]['time'], TradingDate.max_trading_date()) > 20]
-
-class AllStocks(AllIndexes):
-    @classproperty
-    def db(cls):
-        return MdlAllStock
 
     @classmethod
     async def is_quited(cls, code):
@@ -247,7 +270,7 @@ class AllStocks(AllIndexes):
         bks = ','.join(['b:' + bk for bk in bks])
         clist = Em.qt_clist(fs=bks, fields='f12,f13,f14,f26')
         return clist
-    
+
     @classmethod
     async def load_all_funds(cls):
         def get_stocks(bks, tp):

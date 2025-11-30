@@ -14,6 +14,7 @@
             <div ></div>
             <div class="nav-links">
                 <a href="#" id="adminLink" style="display: none;">用户管理</a>
+                <a href="#" id="settingsLink" style="display: none;">系统设置</a>
                 <a href="#" onclick="logout()">退出登录</a>
             </div>
         </div>
@@ -115,6 +116,9 @@
                     const adminLink = document.getElementById('adminLink');
                     adminLink.style.display = 'inline';
                     adminLink.href = '/admin.html';
+                    const settingsLink = document.getElementById('settingsLink');
+                    settingsLink.style.display = 'inline';
+                    settingsLink.href = '/settings.html';
                 }
 
                 if (currentUser.parent_id) {

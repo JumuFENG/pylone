@@ -45,6 +45,9 @@ async def profile_redirect():
 async def admin_redirect():
     return RedirectResponse(url="/html/admin.html")
 
+@app.get("/settings.html")
+async def settings_redirect():
+    return RedirectResponse(url="/html/settings.html")
 
 
 if __name__ == '__main__':
