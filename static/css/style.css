@@ -22,8 +22,8 @@ body {
     width: 100%;
 }
 
-.container.wide {
-    max-width: 1000px;
+.container.center {
+    max-width: 450px;
 }
 
 h1, h2 {

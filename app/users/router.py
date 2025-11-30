@@ -99,7 +99,7 @@ async def delete_user_protected(
             return
 
 @router.get("/users/subaccounts", response_model=List[UserRead], tags=["users"])
-async def get_subaccounts(user=Depends(current_superuser)):
+async def get_subaccounts(user=Depends(current_active_user)):
     """获取子账户列表"""
     async with async_session_maker() as session:
         result = await session.execute(select(User).where(User.parent_id == user.id))

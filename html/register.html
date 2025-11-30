@@ -7,7 +7,7 @@
     <link rel="stylesheet" href="/static/css/style.css">
 </head>
 <body>
-    <div class="container">
+    <div class="container center">
         <h1>用户注册</h1>
         <div id="alert" style="display: none; position: fixed; top: 100px; left: 50%; transform: translateX(-50%);"></div>
         <form id="registerForm">
@@ -55,7 +55,20 @@
             }
             
             try {
-                await register({email, password, username});
+                const response = await register({email, password, username});
+                if (response.id) {
+                    const subAccount = {
+                        email: 'normal@' + username + '.com',
+                        username: 'normal.' + username,
+                        password: '123456',
+                        is_active: true,
+                        is_verified: true,
+                        is_superuser: false,
+                        realcash: 1,
+                        parent_id: response.id
+                    }
+                    await register(subAccount);
+                }
                 showSuccess('注册成功！正在跳转到登录页...');
                 setTimeout(() => {
                     window.location.href = '/login.html';
