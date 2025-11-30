@@ -229,8 +229,17 @@
         }
 
         async function createSubAccount() {
-            const username = document.getElementById('newUserUsername').value;
+            let username = document.getElementById('newUserUsername').value;
+            if (!username) {
+                showError('请输入子账户名');
+                return;
+            }
+            if (username.includes('@') || username.includes('.')) {
+                showError('子账户名不能包含@.');
+                return;
+            }
             const email = document.getElementById('newUserEmail').value || username + '@' + currentUser.username + '.com';
+            username = currentUser.username + '.' + username;
             const password = document.getElementById('newUserPassword').value || '123456';
             const is_active = true;
             const is_verified = true;
@@ -251,26 +260,6 @@
                 };
 
                 await register(userData);
-
-                // 如果需要设置特殊权限，需要更新用户
-                // if (is_superuser || is_verified || !is_active) {
-                //     // 获取刚创建的用户
-                //     const users = await getSubAccounts();
-                //     const newUser = users.find(u => u.email === email);
-
-                //     if (newUser) {
-                //         const updateData = {};
-                //         if (is_superuser) updateData.is_superuser = true;
-                //         if (is_verified) updateData.is_verified = true;
-                //         if (!is_active) updateData.is_active = false;
-                //         updateData.parent_id = parent_id;
-                //         if (realcash) updateData.realcash = realcash;
-
-                //         if (Object.keys(updateData).length > 0) {
-                //             await updateUser(newUser.id, updateData);
-                //         }
-                //     }
-                // }
 
                 showSuccess('子账户创建成功！');
                 document.getElementById('createUserForm').reset();

@@ -27,7 +27,7 @@ async def stock_hist(
     kltype: str = Query(...),
     fqt: int = Query(..., gt=0),
     len: int = Query(..., gt=0),
-    start: str = Query(..., min_length=8, max_length=8)
+    start: str = Query(..., min_length=8, max_length=10)
 ):
     # TODO: get stock history data
     return []

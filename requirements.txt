@@ -2,6 +2,8 @@ fastapi
 uvicorn[standard]
 sqlalchemy[asyncio]
 aiomysql
+h5py
+numpy
 fastapi-users[sqlalchemy]
 python-multipart
 pydantic[email]

@@ -7,6 +7,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from app.lofig import Config
 from app.db import cfg, engine, Base
 from app.users.models import User
+from app.stock.models import MdlAllIndice
 from app.users.schemas import UserCreate
 from app.users.manager import get_user_db, UserManager
 
@@ -71,15 +72,18 @@ async def create_admin():
             print(f"管理员用户 '{admin_data['username']}' 创建成功")
         break
 
-
+async def create_single_table(table_name):
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.tables[table_name].create)
 
 async def main():
     await check_database()
 
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+    await create_single_table('index_info')
+    # async with engine.begin() as conn:
+    #     await conn.run_sync(Base.metadata.create_all)
 
-    await create_admin()
+    # await create_admin()
 
     await engine.dispose()
 
