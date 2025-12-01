@@ -16,6 +16,12 @@ class TestIndex(unittest.IsolatedAsyncioTestCase):
     async def test_load_index(self):
         await AllStocks.remove('sz399001')
 
+    async def test_get_all_stock_info(self):
+        stocks = await AllStocks.read_all()
+        print(f'Total stocks: {len(stocks)}')
+        for stock in stocks:
+            print(f'Code: {stock.code}, Name: {stock.name}, Type: {stock.typekind}')
+
     async def test_update_kline_data(self):
         await AllStocks.update_kline_data()
 
@@ -36,5 +42,5 @@ class TestIndex(unittest.IsolatedAsyncioTestCase):
 if __name__ == '__main__':
     # unittest.main()
     suite = unittest.TestSuite()
-    suite.addTest(TestIndex('test_load_index'))
+    suite.addTest(TestIndex('test_update_kline_data'))
     unittest.TextTestRunner().run(suite)

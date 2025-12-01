@@ -4,7 +4,9 @@ import requests
 import base64
 from app import PostParams, pparam_doc
 from app.hu import img_to_text
-
+from .stock.history import Khistory as khis
+from .stock.date import TradingDate
+from .stock.manager import AllStocks
 
 router = APIRouter(
     prefix="/api",
@@ -18,19 +20,17 @@ async def root():
 
 @router.get("/tradingdates")
 async def tradingdates(len: int = Query(30, gt=0)):
-    # TODO: get trading dates
-    return [] * len
+    return TradingDate.trading_dates[-len:]
 
 @router.get("/stockhist")
 async def stock_hist(
-    code: str = Query(..., min_length=6, max_length=6),
+    code: str = Query(..., min_length=6, max_length=8),
     kltype: str = Query(...),
-    fqt: int = Query(..., gt=0),
-    len: int = Query(..., gt=0),
-    start: str = Query(..., min_length=8, max_length=10)
+    fqt: int = Query(0, gt=0),
+    len: int = Query(None, gt=0),
+    start: str = Query(None, min_length=8, max_length=10)
 ):
-    # TODO: get stock history data
-    return []
+    return await khis.read_kline(code, kltype, fqt, len, start)
 
 @router.get("/stockzthist")
 async def stock_zthist(
@@ -62,9 +62,12 @@ async def stock_dthist(
 
 @router.get("/allstockinfo")
 async def all_stock_info():
-    # TODO: get all stock info
-    # stkmkts = StockGlobal.getAllStocksShortInfo()
-    # return json.dumps(stkmkts)
+    stksInfo = await AllStocks.read_all()
+    if stksInfo:
+        t_map = {'ABStock': 'AB', 'BJStock': 'AB', 'ETF': 'E', 'LOF': 'L'}
+        return [{
+            'c': s.code, 'n': s.name, 't': t_map.get(s.typekind, '')
+        } for s in stksInfo if s.typekind in ['ABStock', 'BJStock', 'ETF', 'LOF'] ]
     return []
 
 def get_http_request(

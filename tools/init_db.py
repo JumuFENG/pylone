@@ -7,7 +7,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from app.lofig import Config
 from app.db import cfg, engine, Base
 from app.users.models import User
-from app.stock.models import MdlAllStock
+from app.stock.models import MdlStockShare
 from app.users.schemas import UserCreate
 from app.users.manager import get_user_db, UserManager
 
@@ -79,7 +79,7 @@ async def create_single_table(table_name):
 async def main():
     await check_database()
 
-    await create_single_table('all_stocks')
+    await create_single_table(MdlStockShare.__tablename__)
     # async with engine.begin() as conn:
     #     await conn.run_sync(Base.metadata.create_all)
 

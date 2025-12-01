@@ -1,14 +1,11 @@
 import sys
 from typing import List, Tuple
 from datetime import datetime
-from sqlalchemy import select, func, update
-from sqlalchemy.exc import NoResultFound
-from sqlalchemy import select, delete
 import stockrt as srt
 from stockrt.sources.eastmoney import Em
 from app.hu import classproperty
 from app.lofig import logger
-from app.db import async_session_maker
+from app.db import upsert_one, upsert_many, query_one_value, query_aggregate, query_values, delete_records
 from .models import MdlAllStock
 from .schemas import PmStock
 from .history import Khistory as khis
@@ -22,9 +19,7 @@ class AllStocks:
 
     @classmethod
     async def read_all(cls):
-        async with async_session_maker() as session:
-            result = await session.execute(select(cls.db))
-            return result.scalars().all()
+        return await query_values(cls.db)
 
     @classmethod
     async def load_info(cls, stock: PmStock):
@@ -32,6 +27,7 @@ class AllStocks:
         qt = srt.quotes(code).get(code, {})
 
         update_data = {
+            "code": code,
             "name": qt["name"]
         }
         if stock.typekind:
@@ -41,102 +37,15 @@ class AllStocks:
         if stock.quit_date:
             update_data["quit_date"] = stock.quit_date
 
-        async with async_session_maker() as session:
-            result = await session.execute(
-                select(cls.db).where(cls.db.code == code)
-            )
-            obj = result.scalar_one_or_none()
-
-            if obj:
-                for key, value in update_data.items():
-                    setattr(obj, key, value)
-            else:
-                obj = cls.db(code=code, **update_data)
-                session.add(obj)
-
-            await session.commit()
-        return obj
+        await upsert_one(cls.db, update_data, ["code"])
 
     @classmethod
     async def remove(cls, code):
-        async with async_session_maker() as session:
-            try:
-                result = await session.execute(
-                    delete(cls.db).where(cls.db.code == code)
-                )
-                await session.commit()
-                return result.rowcount
-            except Exception as e:
-                await session.rollback()
-                raise e
+        await delete_records(cls.db, cls.db.code == code)
 
     @classmethod
-    async def index_name(cls, code):
-        async with async_session_maker() as session:
-            result = await session.execute(
-                select(cls.db.name).where(cls.db.code == code)
-            )
-            row = result.scalar()
-            return row
-
-    @classmethod
-    async def bulk_upsert_stocks(cls, stocks_data: List[dict]) -> Tuple[int, int]:
-        """
-        批量插入或更新股票数据
-        返回: (新增数量, 更新数量)
-        """
-        if not stocks_data:
-            return 0, 0
-
-        async with async_session_maker() as session:
-            try:
-                # 提取所有股票代码
-                codes = [stock['code'] for stock in stocks_data]
-
-                # 批量查询已存在的记录
-                stmt = select(cls.db).where(cls.db.code.in_(codes))
-                result = await session.execute(stmt)
-                existing_map = {stock.code: stock for stock in result.scalars()}
-
-                # 分离新增和更新记录
-                to_add = []
-                update_count = 0
-
-                for stock_data in stocks_data:
-                    code = stock_data['code']
-                    if code in existing_map:
-                        # 更新现有记录
-                        obj = existing_map[code]
-                        for key, value in stock_data.items():
-                            if hasattr(obj, key):
-                                setattr(obj, key, value)
-                        update_count += 1
-                    else:
-                        # 新增记录
-                        to_add.append(cls.db(**stock_data))
-
-                # 批量插入新记录
-                if to_add:
-                    session.add_all(to_add)
-
-                await session.commit()
-                return len(to_add), update_count
-
-            except Exception as e:
-                await session.rollback()
-                raise e
-
-    async def insert_or_update(cls, stocks_data: List[dict], chunk_size: int = 1000) -> Tuple[int, int]:
-        """分块批量处理，避免内存溢出"""
-        added, updated = 0, 0
-
-        for i in range(0, len(stocks_data), chunk_size):
-            chunk = stocks_data[i:i + chunk_size]
-            result = await cls.bulk_upsert_stocks(chunk)
-            added += result[0]
-            updated += result[1]
-
-        return added, updated
+    async def stock_name(cls, code):
+        await query_one_value(cls.db, 'name', cls.db.code == code)
 
     @classmethod
     async def update_kline_data(cls, kltype='d'):
@@ -145,10 +54,8 @@ class AllStocks:
         Args:
             kltype: K线类型 (d, w, m) 指数只保存这几种K线数据
         '''
-        async with async_session_maker() as session:
-            result = await session.execute(select(cls.db))
-            rows = result.scalars().all()
-            indice_code = [row.code for row in rows]
+        rows = await query_values(cls.db)
+        indice_code = [row.code for row in rows if row.typekind == 'ABStock' or row.typekind == 'BJStock']
         if not indice_code:
             return
 
@@ -198,46 +105,37 @@ class AllStocks:
 
     @classmethod
     async def is_quited(cls, code):
-        code = srt.get_fullcode(code)
-        async with async_session_maker() as session:
-            result = await session.execute(
-                select(cls.db.quit_date).where(cls.db.code == code)
-            )
-            row = result.scalar()
-            return row
+        quit_date = await query_one_value(cls.db, 'quit_date', cls.db.code == srt.get_fullcode(code))
+        return quit_date is not None
 
     @classmethod
     async def load_new_stocks(cls, sdate=None):
-        async with async_session_maker() as session:
-            if sdate is None:
-                result = await session.execute(
-                    select(func.max(cls.db.setup_date))
-                )
-                sdate = result.scalar()
-            if not sdate:
-                sdate = "20000101"
-            sdate = int(sdate.replace('-', ''))
-            clist = Em.qt_clist(
-                fs='m:0+f:8,m:1+f:8,m:0+f:81+s:262144', fields='f12,f13,f14,f21,f26', fid='f26',
-                qtcb=lambda data: min([int(item['f26']) for item in data]) < sdate
-            )
+        if sdate is None:
+            sdate = await query_aggregate('max', cls.db, 'setup_date')
+        if not sdate:
+            sdate = "20000101"
+        sdate = int(sdate.replace('-', ''))
+        clist = Em.qt_clist(
+            fs='m:0+f:8,m:1+f:8,m:0+f:81+s:262144', fields='f12,f13,f14,f21,f26', fid='f26',
+            qtcb=lambda data: min([int(item['f26']) for item in data]) < sdate
+        )
 
-            newstocks = []
-            for nsobj in clist:
-                c = nsobj['f12']
-                n = nsobj['f14']
-                ipodays = (datetime.now() - datetime.strptime(str(nsobj['f26']), "%Y%m%d")).days
-                if ipodays > 10:
-                    continue
-                code = srt.get_fullcode(c)
-                tp = 'BJStock' if code.startswith('BJ') else 'ABStock'
-                d = str(nsobj['f26'])
-                newstocks.append({
-                    'code': code, 'name': n, 'typekind': tp, 'setup_date': d[0:4] + '-' + d[4:6] + '-' + d[6:]
-                })
+        newstocks = []
+        for nsobj in clist:
+            c = nsobj['f12']
+            n = nsobj['f14']
+            ipodays = (datetime.now() - datetime.strptime(str(nsobj['f26']), "%Y%m%d")).days
+            if ipodays > 10:
+                continue
+            code = srt.get_fullcode(c)
+            tp = 'BJStock' if code.startswith('bj') else 'ABStock'
+            d = str(nsobj['f26'])
+            newstocks.append({
+                'code': code, 'name': n, 'typekind': tp, 'setup_date': d[0:4] + '-' + d[4:6] + '-' + d[6:]
+            })
 
-            if newstocks:
-                await cls.insert_or_update(newstocks)
+        if newstocks:
+            await upsert_many(cls.db, newstocks, ['code'])
 
     @classmethod
     async def load_a_stocks(cls):
@@ -254,14 +152,14 @@ class AllStocks:
             return stocks
 
         astocks = []
-        astocks.extend(get_stocks_of('m:1+t:2+f:!2,m:1+t:23+f:!2', 'ABStock', 'SH'))
-        astocks.extend(get_stocks_of('m:1+t:2+f:2,m:1+t:23+f:2', 'TSStock', 'SH'))
-        astocks.extend(get_stocks_of('m:0+t:6+f:!2,m:0+t:80+f:!2', 'ABStock', 'SZ'))
-        astocks.extend(get_stocks_of('m:0+t:6+f:2,m:0+t:80+f:2', 'TSStock', 'SZ'))
-        astocks.extend(get_stocks_of('m:0+t:81+s:262144+f:!2', 'BJStock', 'BJ'))
-        astocks.extend(get_stocks_of('m:0+t:81+s:262144+f:2', 'TSStock', 'BJ'))
+        astocks.extend(get_stocks_of('m:1+t:2+f:!2,m:1+t:23+f:!2', 'ABStock', 'sh'))
+        astocks.extend(get_stocks_of('m:1+t:2+f:2,m:1+t:23+f:2', 'TSStock', 'sh'))
+        astocks.extend(get_stocks_of('m:0+t:6+f:!2,m:0+t:80+f:!2', 'ABStock', 'sz'))
+        astocks.extend(get_stocks_of('m:0+t:6+f:2,m:0+t:80+f:2', 'TSStock', 'sz'))
+        astocks.extend(get_stocks_of('m:0+t:81+s:262144+f:!2', 'BJStock', 'bj'))
+        astocks.extend(get_stocks_of('m:0+t:81+s:262144+f:2', 'TSStock', 'bj'))
 
-        await cls.insert_or_update(astocks)
+        await upsert_many(cls.db, astocks, ['code'], 3000)
 
     @classmethod
     async def get_bkstocks(self, bks):
@@ -285,4 +183,4 @@ class AllStocks:
         funds = []
         funds.extend(get_stocks(['MK0021', 'MK0022', 'MK0023', 'MK0024'], 'ETF'))
         funds.extend(get_stocks(['MK0404', 'MK0405', 'MK0406', 'MK0407'], 'LOF'))
-        await cls.insert_or_update(funds)
+        await upsert_many(cls.db, funds, ['code'])

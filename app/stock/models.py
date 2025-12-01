@@ -12,6 +12,29 @@ class MdlAllStock(Base):
     setup_date = Column(String(20), nullable=True)
     quit_date = Column(String(20), nullable=True)
 
+class MdlStockShare(Base):
+    __tablename__ = "stock_bonus_shares"
+
+    code = Column(String(20), nullable=False)
+    report_date = Column(String(20), nullable=True)
+    register_date = Column(String(20), nullable=True)
+    ex_dividend_date = Column(String(20), nullable=True)
+    progress = Column(String(20), nullable=True)
+    total_bonus = Column(Float, default=0)
+    bonus_share = Column(Float, default=0)
+    transfer_share = Column(Float, default=0)
+    cash_dividend = Column(Float, default=0)
+    dividend_yield = Column(Float, default=0)
+    eps = Column(Float, default=0)
+    bvps = Column(Float, default=0)
+    total_shares = Column(Float, nullable=True)
+    bonus_details = Column(String(64), nullable=True)
+
+    __table_args__ = (
+        PrimaryKeyConstraint('code', 'report_date', name='pk_stock_bonus_shares'),
+    )
+
+
 class UserStocks(Base):
     __tablename__ = "user_stocks"
 
@@ -28,9 +51,9 @@ class UserStocks(Base):
 
 class UserStrategy(Base):
     __tablename__ = "user_strategy"
+    user_id = Column(Integer, nullable=False)
     code = Column(String(10), primary_key=True)
     id = Column(Integer, primary_key=True)
-    user_id = Column(Integer, nullable=False)
     skey = Column(String(64))
     trans = Column(SmallInteger)
     data = Column(String(255))
