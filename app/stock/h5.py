@@ -35,15 +35,15 @@ class TimeConverter:
 class KLineStorage:
     saved_dtype = {
             'time': 'int64',
+            'close': 'int32',
             'open': 'int32',
             'high': 'int32',
             'low': 'int32',
-            'close': 'int32',
             'volume': 'int64',
             'amount': 'int64',
-            'amplitude': 'int32',
             'change': 'int32',
             'change_px': 'int32',
+            'amplitude': 'int32',
             'turnover': 'int32'
         }
 
@@ -168,7 +168,7 @@ class KLineStorage:
     @lru_cache(maxsize=2000)
     def read_saved_kline_data(cls, fcode: str, kline_type: int=101, length: int=0) -> np.ndarray:
         '''从HDF5文件中读取K线数据'''
-        if kline_type not in cls.saved_kline_types():
+        if kline_type not in cls.saved_kline_types:
             logger.error(f'kline_type {kline_type} not in (1, 5, 15, 101, 102, 103, 104, 105, 106)')
             return
         file_path = cls.h5_saved_path(fcode, kline_type)
@@ -221,7 +221,7 @@ class KLineStorage:
     @classmethod
     def read_kline_data(cls, fcode: str, kline_type: Union[int, str]=101, length: int=0):
         kline_type = rtbase.to_int_kltype(kline_type)
-        if kline_type not in cls.saved_kline_types():
+        if kline_type not in cls.saved_kline_types:
             if kline_type % 15 == 0:
                 saved_klines = cls.read_saved_kline_data(fcode, 15, length*kline_type/15)
                 return cls.extend_kline_data(saved_klines, 15, kline_type)

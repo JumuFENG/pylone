@@ -26,11 +26,12 @@ async def tradingdates(len: int = Query(30, gt=0)):
 async def stock_hist(
     code: str = Query(..., min_length=6, max_length=8),
     kltype: str = Query(...),
-    fqt: int = Query(0, gt=0),
-    len: int = Query(None, gt=0),
+    fqt: int = Query(0, ge=0),
+    length: int = Query(None, ge=0),
     start: str = Query(None, min_length=8, max_length=10)
 ):
-    return await khis.read_kline(code, kltype, fqt, len, start)
+    data = await khis.read_kline(code, kltype, fqt, length, start)
+    return data.tolist()
 
 @router.get("/stockzthist")
 async def stock_zthist(
