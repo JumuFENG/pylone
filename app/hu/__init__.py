@@ -1,5 +1,6 @@
 import ddddocr
 import os
+import time
 import base64
 from functools import lru_cache
 from weakref import WeakKeyDictionary
@@ -24,14 +25,17 @@ def img_to_text(img):
             img = f.read()
     return ocr().classification(img)
 
+def time_stamp():
+    return int(time.time()*1000)
+
 class FixedPointConverter:
     def __init__(self, precision=4):
         self.precision = precision
         self.scale = 10 ** precision
 
-    def float_to_int(self, float_array):
+    def float_to_int(self, float_array, dtype='int32'):
         """将浮点数转换为整数"""
-        return (float_array * self.scale).astype('int32')
+        return (float_array * self.scale).astype(dtype)
 
     def int_to_float(self, int_array):
         """将整数转换回浮点数"""

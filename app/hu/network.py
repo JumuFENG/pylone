@@ -37,7 +37,7 @@ class EmRequest():
     def getUrl(self):
         pass
 
-    async def getNext(self, params=None, proxies=None):
+    async def getNext(self, headers=None):
         pass
 
     def saveFetched(self):

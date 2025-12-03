@@ -102,6 +102,18 @@ class Config:
         return cls.all_configs().get('client', {})
 
     @classmethod
+    @lru_cache(maxsize=1)
+    def h5_history_dir(cls):
+        h5dir = cls.all_configs().get('client', {}).get('history_dir', './data')
+        h5dir = os.path.abspath(h5dir)
+        if not os.path.isdir(h5dir):
+            os.makedirs(h5dir)
+        h5ts = os.path.join(h5dir, 'ts')
+        if not os.path.isdir(h5ts):
+            os.makedirs(h5ts)
+        return h5dir
+
+    @classmethod
     def database_config(cls):
         return cls.all_configs().get('database', {})
 

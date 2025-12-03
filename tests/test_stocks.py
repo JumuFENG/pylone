@@ -11,6 +11,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from app.lofig import Config
 from app.stock.manager import AllStocks
+from app.stock.history import Khistory as khis
 
 class TestIndex(unittest.IsolatedAsyncioTestCase):
     async def test_load_index(self):
@@ -23,7 +24,12 @@ class TestIndex(unittest.IsolatedAsyncioTestCase):
             print(f'Code: {stock.code}, Name: {stock.name}, Type: {stock.typekind}')
 
     async def test_update_kline_data(self):
-        await AllStocks.update_kline_data()
+        await AllStocks.update_kline_data(sectype='Index')
+        # AllStocks.update_klines_by_code(['sh000001'])
+
+    async def test_read_kline(self):
+        data = await khis.read_kline('sh000001', 'd')
+        print(json.dumps(data.tolist(), indent=4))
 
     async def test_np_convert(self):
         from app.stock.h5 import KLineStorage

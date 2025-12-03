@@ -1,4 +1,5 @@
 import sys
+import numpy as np
 from typing import List, Tuple
 from datetime import datetime
 import stockrt as srt
@@ -8,7 +9,7 @@ from app.lofig import logger
 from app.db import upsert_one, upsert_many, query_one_value, query_aggregate, query_values, delete_records
 from .models import MdlAllStock
 from .schemas import PmStock
-from .history import Khistory as khis
+from .history import (Khistory as khis, FflowHistory as fhis)
 from .date import TradingDate
 
 
@@ -48,21 +49,30 @@ class AllStocks:
         await query_one_value(cls.db, 'name', cls.db.code == code)
 
     @classmethod
-    async def update_kline_data(cls, kltype='d'):
+    async def update_kline_data(cls, kltype='d', sectype: str = None):
         '''
         更新表中所有指数的K线数据
         Args:
             kltype: K线类型 (d, w, m) 指数只保存这几种K线数据
         '''
         rows = await query_values(cls.db)
-        indice_code = [row.code for row in rows if row.typekind == 'ABStock' or row.typekind == 'BJStock']
-        if not indice_code:
+        target_types = ['Index', 'ETF', 'LOF', 'ABStock', 'BJStock', 'TSStock']
+        if sectype in target_types:
+            target_code = [row.code for row in rows if row.typekind == sectype]
+        else:
+            if kltype == 'd':
+                stock_cns = {r.code: r.name for r in rows if r.code.startswith(('sh', 'sz', 'bj')) and r.typekind in ('ABStock', 'BJStock')}
+                target_code = await cls.update_stock_daily_kline_and_fflow(stock_cns)
+            else:
+                target_code = [row.code for row in rows if row.typekind == 'ABStock' or row.typekind == 'BJStock']
+
+        if not target_code:
             return
 
-        cls.update_klines_by_code(indice_code, kltype)
+        cls.update_klines_by_code(target_code, kltype)
 
     @classmethod
-    def update_klines_by_code(cls, stocks, kltype: str='d'):
+    def update_klines_by_code(cls, stocks, kltype: str='d') -> List[str]:
         """
         Updates the K-line data for a list of stock codes based on the specified K-line type.
 
@@ -102,6 +112,44 @@ class AllStocks:
                 khis.save_kline(c, kltype, klines[c])
         srt.set_array_format(ofmt)
         return [c for c in sum(fixlens.values(), []) if c not in klines or len(klines[c]) == 0 or TradingDate.calc_trading_days(klines[c][-1]['time'], TradingDate.max_trading_date()) > 20]
+
+    @classmethod
+    async def update_stock_daily_kline_and_fflow(cls, cns: dict = {}):
+        '''
+        通过涨幅榜更新当日K线数据和资金流数据，必须盘后执行，盘中获取的收盘价为当时的最新价
+
+        :return: 有最新价但是与数据库中保存的数据不连续的股票列表，需单独获取股票K线
+        '''
+        srt.set_default_sources('stock_list', 'stocklistapi', ('eastmoney', 'sina'), False)
+        stock_list = srt.stock_list()
+        if 'all' not in stock_list:
+            return
+
+        stock_list = stock_list['all']
+        result = {}
+        for stock in stock_list:
+            c = stock['code'][-6:]
+            result[c] = {** stock}
+            if 'time' not in stock:
+                result[c]['time'] = TradingDate.max_trading_date()
+            if 'amplitude' not in stock:
+                result[c]['amplitude'] = (stock['high'] - stock['low']) / stock['lclose']
+        unconfirmed = []
+        for c, kl in result.items():
+            mxdate = khis.max_date(c, 'd')
+            if TradingDate.prev_trading_date(TradingDate.max_trading_date()) == mxdate:
+                dtypes = [('time', 'U10'), ('open', 'float'), ('high', 'float'), ('low', 'float'), ('close', 'float'),
+                          ('volume', 'int64'), ('amount', 'int64'), ('change', 'float'), ('change_px', 'float'), ('amplitude', 'float')]
+                npkl = np.array([(kl['time'], kl['open'], kl['high'], kl['low'], kl['close'], kl['volume'], kl['amount'], kl['change'], kl['change_px'], kl['amplitude'])], dtype=dtypes)
+                khis.save_kline(c, 'd', npkl)
+            else:
+                unconfirmed.append(c)
+            mxfdate = fhis.max_date(c)
+            if 'main' in kl and TradingDate.prev_trading_date(TradingDate.max_trading_date()) == mxfdate:
+                fhis.save_fflow(c, [[kl['time'], kl['main'], kl['small'], kl['middle'], kl['big'], kl['super'], kl['mainp'], kl['smallp'], kl['middlep'], kl['bigp'], kl['superp']]])
+            if c in cns and cns[c] != kl['name']:
+                await upsert_one(cls.db, {"code": c, "name": kl['name']}, ["code"])
+        return unconfirmed
 
     @classmethod
     async def is_quited(cls, code):

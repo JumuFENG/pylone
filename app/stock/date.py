@@ -18,17 +18,19 @@ class TradingDate():
     @classmethod
     @lru_cache(maxsize=1)
     def max_trading_date(self):
-        mxdate = self.trading_dates[-1]
+        mxdate = self.max_traded_date()
         if mxdate != self.today():
             sysdate, tradeday = self.get_today_system_date()
             if tradeday:
+                if sysdate > self.trading_dates[-1]:
+                    self.trading_dates.append(sysdate)
                 return sysdate
         return mxdate
 
     @classmethod
     @lru_cache(maxsize=1)
     def max_traded_date(self):
-        return str(self.trading_dates[-1])
+        return kls.max_date('sh000001')
 
     @classmethod
     def is_trading_date(self, date):

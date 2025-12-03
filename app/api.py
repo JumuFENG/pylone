@@ -30,8 +30,11 @@ async def stock_hist(
     length: int = Query(None, ge=0),
     start: str = Query(None, min_length=8, max_length=10)
 ):
-    data = await khis.read_kline(code, kltype, fqt, length, start)
-    return data.tolist()
+    try:
+        data = await khis.read_kline(code, kltype, fqt, length, start)
+        return data.tolist()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/stockzthist")
 async def stock_zthist(

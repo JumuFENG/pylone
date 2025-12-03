@@ -2,12 +2,15 @@ import asyncio
 import sys
 import os
 import aiomysql
+import numpy as np
 from typing import Dict, List, Tuple, Callable, Optional
 
 # 添加项目路径
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from app.lofig import Config
 from app.db import cfg, engine, Base
+from app.stock.history import Khistory as khis
+from app.stock.h5 import KLineStorage
 cfg['password'] = Config.simple_decrypt(cfg['password'])
 
 
@@ -26,6 +29,15 @@ async def check_database_exists(cursor, dbname: str) -> bool:
     await cursor.execute(
         "SELECT SCHEMA_NAME FROM INFORMATION_SCHEMA.SCHEMATA WHERE SCHEMA_NAME = %s",
         (dbname,)
+    )
+    result = await cursor.fetchone()
+    return result is not None
+
+async def check_table_exists(cursor, dbname: str, tablename: str) -> bool:
+    """检查表是否存在"""
+    await cursor.execute(
+        "SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = %s AND TABLE_NAME = %s",
+        (dbname, tablename)
     )
     result = await cursor.fetchone()
     return result is not None
@@ -157,5 +169,94 @@ async def migrate_stock_bonus_shares():
     finally:
         conn.close()
 
+async def migrate_kline_data(
+    conn,
+    from_dbname: str,
+    code: str,
+    columns_mapping: Dict[str, str],
+    unique_keys: List[int],
+    transform_func: Optional[Callable] = None
+):
+    """迁移 kline 数据的示例函数"""
+    kltype_table_map = {
+        101: f's_k_his_{code}',
+        15: f's_k15_his_{code}',
+        102: f's_kw_his_{code}',
+        103: f's_km_his_{code}'
+    }
+    async with conn.cursor() as cursor:
+        # 检查源数据库是否存在
+        if not await check_database_exists(cursor, from_dbname):
+            print(f"源数据库 '{from_dbname}' 不存在，无法进行数据迁移。")
+            return
+
+        KLineStorage.delete_dataset('sh688588')
+        for kltype, table_name in kltype_table_map.items():
+            if not await check_table_exists(cursor, from_dbname, table_name):
+                print(f"源表 '{table_name}' 不存在，跳过迁移。")
+                continue
+            # 查询源数据
+            source_columns = ', '.join(columns_mapping.values())
+            await cursor.execute(f"SELECT {source_columns} FROM `{from_dbname}`.`{table_name}`")
+            rows = await cursor.fetchall()
+
+            if not rows:
+                print(f"源表 '{table_name}' 中没有数据可迁移。")
+                continue
+
+            # 转换和去重数据
+            unique_rows = transform_rows(rows, unique_keys, transform_func)
+
+            if not unique_rows:
+                print(f"表 '{table_name}' 去重后没有数据可迁移。")
+                continue
+
+            dtypes = [(col, 'U20' if col == 'time' else 'float64') for col in columns_mapping.keys()]
+            odata = np.array([tuple(r) for r in unique_rows], dtype=dtypes)
+            khis.save_kline(code, kltype, odata)
+
+async def migrate_stock_klines(code: str):
+    """迁移指定股票的 K 线数据"""
+    conn = await get_connection()
+
+    from_dbname = 'history_db'
+
+    columns_mapping = {
+        'time': 'date',
+        'open': 'open',
+        'high': 'high',
+        'low': 'low',
+        'close': 'close',
+        'volume': 'volume',
+        'amount': 'amount',
+        'change': 'p_change',
+        'change_px': 'price_change',
+    }
+
+    # 定义转换函数：将 time 字段格式化为统一格式
+    def transform_func(row):
+        time_str = row[0]
+        if len(time_str) == 10:
+            time_str += ' 00:00:00'
+        elif len(time_str) == 16:
+            time_str += ':00'
+        volume = float(row[5]) * 1e4
+        amount = float(row[6]) * 1e4
+        change = float(row[7].strip('%'))/100 if row[7].endswith('%') else float(row[7])/100
+        return (time_str,) + row[1:5] + (volume, amount, change, row[8])
+
+    try:
+        await migrate_kline_data(
+            conn=conn,
+            from_dbname=from_dbname,
+            code=code,
+            columns_mapping=columns_mapping,
+            unique_keys=[0],  # 使用 time 字段去重
+            transform_func=transform_func
+        )
+    finally:
+        conn.close()
+
+
 if __name__ == '__main__':
-    asyncio.run(migrate_stock_bonus_shares())
+    asyncio.run(migrate_stock_klines('sh688588'))

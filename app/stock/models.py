@@ -5,8 +5,7 @@ from app.db import Base, engine
 class MdlAllStock(Base):
     __tablename__ = "all_stocks"
 
-    id = Column(Integer, primary_key=True)
-    code = Column(String(20), nullable=False)
+    code = Column(String(20), primary_key=True, nullable=False)
     name = Column(String(255), nullable=False)
     typekind = Column(String(20), nullable=True)
     setup_date = Column(String(20), nullable=True)
@@ -38,7 +37,6 @@ class MdlStockShare(Base):
 class UserStocks(Base):
     __tablename__ = "user_stocks"
 
-    id = Column(Integer, primary_key=True, autoincrement=True)
     user_id = Column(Integer, nullable=False)
     code = Column(String(10), nullable=False)
     cost_hold = Column(Float)
@@ -48,6 +46,10 @@ class UserStocks(Base):
     fee = Column(Float)
     amount = Column(Integer)
     uramount = Column(String(255))
+
+    __table_args__ = (
+        PrimaryKeyConstraint('user_id', 'code', name='pk_user_stocks'),
+    )
 
 class UserStrategy(Base):
     __tablename__ = "user_strategy"
