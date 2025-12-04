@@ -7,7 +7,7 @@ from app.users.router import router as users_router
 from app.admin.router import router as admin_router
 from app.stock.router import router as stock_router
 from app.api import router as api_router
-
+from app.tasks.timer_task import Timers
 
 cfg = Config.client_config()
 app = FastAPI(title=cfg.get('app_name', 'pyswee'))
@@ -51,5 +51,6 @@ async def settings_redirect():
 
 
 if __name__ == '__main__':
+    Timers.setup()
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=cfg.get('port', 8000))

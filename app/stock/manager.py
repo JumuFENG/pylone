@@ -152,6 +152,13 @@ class AllStocks:
         return unconfirmed
 
     @classmethod
+    async def update_stock_fflow(cls):
+        rows = await query_values(cls.db)
+        for r in rows:
+            if r.code.startswith(('sh', 'sz', 'bj')) and r.typekind in ('ABStock', 'BJStock'):
+                await fhis.update_fflow(r.code)
+
+    @classmethod
     async def is_quited(cls, code):
         quit_date = await query_one_value(cls.db, 'quit_date', cls.db.code == srt.get_fullcode(code))
         return quit_date is not None

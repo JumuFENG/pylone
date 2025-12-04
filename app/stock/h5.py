@@ -312,3 +312,15 @@ class FflowStorage(H5Storage):
         histroy_dir = Config.h5_history_dir()
         return f"{histroy_dir}/fflow.h5"
 
+    @classmethod
+    def save_fflow(cls, code, fflow):
+        dtypes = [
+            ('time', 'U10'), ('main', 'int64'), ('small', 'int64'), ('middle', 'int64'), ('big', 'int64'), ('super', 'int64'),
+            ('mainp', 'float'), ('smallp', 'float'), ('middlep', 'float'), ('bigp', 'float'), ('superp', 'float')]
+        values = np.array([(
+            f[0], int(float(f[1])), int(float(f[2])), int(float(f[3])), int(float(f[4])), int(float(f[5])),
+            float(f[6])/100, float(f[7])/100, float(f[8])/100, float(f[9])/100, float(f[10])/100)
+            for f in fflow],
+            dtype=dtypes
+        )
+        cls.save_dataset(code, np.array(values, dtype=cls.saved_dtype))

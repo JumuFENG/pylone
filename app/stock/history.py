@@ -26,7 +26,7 @@ class Khistory:
 
     @staticmethod
     def guess_bars_since(last_date, kltype='d'):
-        if last_date is None:
+        if last_date is None or last_date == '':
             return sys.maxsize
 
         if kltype == 'w' or kltype == 102:
@@ -509,23 +509,25 @@ class FflowRequest(EmRequest):
         fflow = [f for f in fflow if f[0] > maxdate]
         if not fflow or len(fflow) == 0:
             return
-        FflowHistory.save_fflow(self.code, fflow)
+        ffs.save_fflow(self.code, fflow)
 
 
 class FflowHistory:
+    @classproperty
+    def fclient(cls) -> FflowRequest:
+        return FflowRequest()
+
     @classmethod
     def max_date(self, code):
         return ffs.max_date(code)
 
     @classmethod
     def save_fflow(self, code, fflow):
-        dtypes = [
-            ('time', 'U10'), ('main', 'int64'), ('small', 'int64'), ('middle', 'int64'), ('big', 'int64'), ('super', 'int64'),
-            ('mainp', 'float'), ('smallp', 'float'), ('middlep', 'float'), ('bigp', 'float'), ('superp', 'float')]
-        values = np.array([(
-            f[0], int(float(f[1])), int(float(f[2])), int(float(f[3])), int(float(f[4])), int(float(f[5])),
-            float(f[6])/100, float(f[7])/100, float(f[8])/100, float(f[9])/100, float(f[10])/100)
-            for f in fflow],
-            dtype=dtypes
-        )
-        ffs.save_dataset(code, np.array(values, dtype=ffs.saved_dtype))
+        ffs.save_fflow(code, fflow)
+
+    @classmethod
+    async def update_fflow(cls, code):
+        if cls.max_date(code) == TradingDate.max_trading_date():
+            return
+        cls.fclient.setCode(code)
+        await cls.fclient.getNext()

@@ -34,6 +34,13 @@ class MdlStockShare(Base):
     )
 
 
+class MdlSysSettings(Base):
+    __tablename__ = "sys_settings"
+
+    key = Column(String(20), nullable=False, primary_key=True)
+    value = Column(String(255), nullable=False)
+
+
 class UserStocks(Base):
     __tablename__ = "user_stocks"
 

@@ -4,6 +4,8 @@ import time
 import base64
 from functools import lru_cache
 from weakref import WeakKeyDictionary
+from datetime import datetime
+
 
 class classproperty:
     def __init__(self, initializer):
@@ -27,6 +29,16 @@ def img_to_text(img):
 
 def time_stamp():
     return int(time.time()*1000)
+
+def delay_seconds(daytime:str)->float:
+    '''计算当前时间到daytime的时间间隔'''
+    dnow = datetime.now()
+    dtarr = daytime.split(':')
+    hr = int(dtarr[0])
+    minutes = 0 if len(dtarr) < 2 else int(dtarr[1])
+    secs = 0 if len(dtarr) < 3 else int(dtarr[2])
+    target_time = dnow.replace(hour=hr, minute=minutes, second=secs)
+    return (target_time - dnow).total_seconds()
 
 class FixedPointConverter:
     def __init__(self, precision=4):
