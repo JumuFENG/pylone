@@ -4,9 +4,10 @@ import requests
 import base64
 from app import PostParams, pparam_doc
 from app.hu import img_to_text
+from app.hu.network import Network
 from .stock.history import Khistory as khis
 from .stock.date import TradingDate
-from .stock.manager import AllStocks
+from .stock.manager import AllStocks, AllBlocks
 
 router = APIRouter(
     prefix="/api",
@@ -74,6 +75,11 @@ async def all_stock_info():
         } for s in stksInfo if s.typekind in ['ABStock', 'BJStock', 'ETF', 'LOF'] ]
     return []
 
+@router.get("/allbks")
+async def all_bks():
+    bks = await AllBlocks.read_all()
+    return [{'code': c, 'name': n, 'chgignore': i} for c,n,i in bks]
+
 def get_http_request(
     url: str,
     host: str = None,
@@ -87,13 +93,7 @@ def get_http_request(
             url += '='
         url = base64.b64decode(url).decode()
 
-    headers = {
-        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:138.0) Gecko/20100101 Firefox/138.0',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
-        'Accept-Language': 'en-US,en;q=0.5',
-        'Accept-Encoding': 'gzip, deflate, br',
-        'Connection': 'keep-alive'
-    }
+    headers = Network.headers.copy()
 
     if host is not None:
         headers['Host'] = host

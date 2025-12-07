@@ -7,7 +7,7 @@ from app.users.manager import current_superuser
 from app.db import async_session_maker
 from app.users.models import User
 from app.users.schemas import UserRead
-from app.stock.manager import AllStocks
+from app.stock.manager import AllStocks, AllBlocks
 from app.stock.schemas import PmStock
 from app.hu.network import Network as net
 
@@ -74,6 +74,10 @@ async def search_stocks(keyword: str, user=Depends(current_superuser)):
 async def add_stock(stock: PmStock, user=Depends(current_superuser)):
     await AllStocks.load_info(stock)
 
-@router.post('/removestock')
+@router.post("/removestock")
 async def remove_stock(code:str = Body(..., embed=True), user=Depends(current_superuser)):
     await AllStocks.remove(code)
+
+@router.post("/ignore_bk")
+async def ignore_bk(code:str = Body(..., embed=True), ignore:int = Body(1, embed=True), user=Depends(current_superuser)):
+    await AllBlocks.ignore_bk(code, ignore)

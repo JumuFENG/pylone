@@ -254,6 +254,14 @@ class AllBlocks:
         return StockBkMap()
 
     @classmethod
+    async def read_all(cls):
+        return await query_values(cls.db)
+
+    @classmethod
+    async def read_ignored(cls):
+        return await query_values(cls.db, ['code'], cls.db.chgignore == 1)
+
+    @classmethod
     async def load_info(cls, code, name=None):
         update_data = {
             "code": code
@@ -272,6 +280,6 @@ class AllBlocks:
             await cls.bkmap.getNext()
 
     @classmethod
-    async def ignore_bk(cls, code):
-        await upsert_one(cls.db, {'code': code, 'chgignore': 1}, ['code'])
+    async def ignore_bk(cls, code, ignore=1):
+        await upsert_one(cls.db, {'code': code, 'chgignore': ignore}, ['code'])
 

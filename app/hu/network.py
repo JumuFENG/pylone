@@ -10,6 +10,16 @@ class Network:
     def session(cls) -> requests.Session:
         return requests.Session()
 
+    @classproperty
+    def headers(cls) -> dict:
+        return {
+            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:138.0) Gecko/20100101 Firefox/138.0',
+            'Accept': '/',
+            'Accept-Language': 'en-US,en;q=0.5',
+            'Accept-Encoding': 'gzip, deflate, br',
+            'Connection': 'keep-alive'
+        }
+
     @classmethod
     @retry(
         wait=wait_exponential(multiplier=1, min=1, max=5),
@@ -30,13 +40,7 @@ class Network:
 
 class EmRequest():
     def __init__(self) -> None:
-        self.headers = {
-            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:138.0) Gecko/20100101 Firefox/138.0',
-            'Accept': '/',
-            'Accept-Language': 'en-US,en;q=0.5',
-            'Accept-Encoding': 'gzip, deflate, br',
-            'Connection': 'keep-alive'
-        }
+        self.headers = Network.headers.copy()
 
     @retry(
         wait=wait_exponential(multiplier=1, min=1, max=5),
