@@ -10,6 +10,7 @@ from app.users.schemas import UserRead
 from app.stock.manager import AllStocks, AllBlocks
 from app.stock.schemas import PmStock
 from app.hu.network import Network as net
+from .system_settings import SystemSettings
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -20,7 +21,7 @@ async def admin_user_list(user=Depends(current_superuser)):
     async with async_session_maker() as session:
         result = await session.execute(select(User))
         users = result.scalars().all()
-    
+
     return users
 
 @router.get("/search", response_model=List[PmStock])
@@ -81,3 +82,29 @@ async def remove_stock(code:str = Body(..., embed=True), user=Depends(current_su
 @router.post("/ignore_bk")
 async def ignore_bk(code:str = Body(..., embed=True), ignore:int = Body(1, embed=True), user=Depends(current_superuser)):
     await AllBlocks.ignore_bk(code, ignore)
+
+@router.get("/system_info")
+async def get_system_info(user=Depends(current_superuser)):
+    """获取系统信息"""
+    return SystemSettings.get_system_info()
+
+@router.get("/system_settings")
+async def get_system_settings(user=Depends(current_superuser)):
+    """获取所有系统设置"""
+    return await SystemSettings.get_all_with_description()
+
+@router.post("/system_settings")
+async def update_system_setting(
+    key: str = Body(..., embed=True),
+    value: str = Body(..., embed=True),
+    user=Depends(current_superuser)
+):
+    """更新系统设置"""
+    await SystemSettings.set(key, value)
+    return {"message": "设置已更新"}
+
+@router.delete("/system_settings/{key}")
+async def delete_system_setting(key: str, user=Depends(current_superuser)):
+    """删除系统设置"""
+    await SystemSettings.delete(key)
+    return {"message": "设置已删除"}

@@ -37,8 +37,11 @@ class MdlStockShare(Base):
 class MdlSysSettings(Base):
     __tablename__ = "sys_settings"
 
-    key = Column(String(32), nullable=False, primary_key=True)
+    id = Column(Integer, nullable=False, primary_key=True)
+    key = Column(String(32), nullable=False, unique=True)
     value = Column(String(255), nullable=False)
+    name = Column(String(255), nullable=False, default="")
+    valtype = Column(SmallInteger, nullable=False, default=0)
 
 
 class MdlStockBk(Base):

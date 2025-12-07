@@ -22,7 +22,7 @@
             <div style="width: 25%;">
                 <h2 style="margin-bottom: auto;">个人信息</h2>
 
-                <div id="userInfo" style="display: none;">
+                <div id="userInfo" class="d-none">
                     <div class="nav-links hover-actions" style="display: flex;flex-direction: row-reverse;">
                         <a id="editBtn" href="#" onclick="toggleEdit()">修改密码</a>
                         <a id="saveBtn" href="#" style="display: none;" onclick="saveChanges()">保存</a>
@@ -126,7 +126,7 @@
                 }
 
                 document.getElementById('loading').style.display = 'none';
-                document.getElementById('userInfo').style.display = 'block';
+                document.getElementById('userInfo').classList.remove('d-none');
             } catch (error) {
                 showError(error.message);
                 document.getElementById('loading').style.display = 'none';
