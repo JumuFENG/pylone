@@ -90,8 +90,8 @@ async def get_system_info(user=Depends(current_superuser)):
 
 @router.get("/system_settings")
 async def get_system_settings(user=Depends(current_superuser)):
-    """获取所有系统设置"""
-    return await SystemSettings.get_all_with_description()
+    """获取所有系统设置（带元数据，按id排序）"""
+    return await SystemSettings.get_all_with_metadata()
 
 @router.post("/system_settings")
 async def update_system_setting(
@@ -102,6 +102,21 @@ async def update_system_setting(
     """更新系统设置"""
     await SystemSettings.set(key, value)
     return {"message": "设置已更新"}
+
+@router.post("/system_settings/create")
+async def create_system_setting(
+    key: str = Body(..., embed=True),
+    value: str = Body(..., embed=True),
+    name: str = Body(..., embed=True),
+    valtype: int = Body(..., embed=True),
+    user=Depends(current_superuser)
+):
+    """创建新的系统设置"""
+    try:
+        await SystemSettings.create(key, value, name, valtype)
+        return {"message": "设置已创建"}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 @router.delete("/system_settings/{key}")
 async def delete_system_setting(key: str, user=Depends(current_superuser)):

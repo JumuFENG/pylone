@@ -1,28 +1,25 @@
 # -*- coding: utf-8 -*-
 """系统设置管理模块"""
 from datetime import datetime
-from typing import Optional, Dict, Any
-from app.db import query_one_value, query_values, upsert_one
+from typing import Optional, Dict, Any, List
+from enum import IntEnum
+from app.db import query_one_value, query_values, upsert_one, query_aggregate
 from app.stock.models import MdlSysSettings
 from app.lofig import Config
 import platform
 
 
+class SettingValueType(IntEnum):
+    """设置值类型枚举"""
+    READONLY = 0    # 只读项，无法通过网页修改
+    BOOLEAN = 1     # 开关量（0/1）
+    NUMBER = 2      # 数值量
+    STRING = 3      # 字符串量
+
+
 class SystemSettings:
     """系统设置管理类"""
-
-    # 预定义的设置项
-    SETTINGS_KEYS = {
-        'lastdaily_run_at': '最后日更新时间',
-        'lastweekly_run_at': '最后周更新时间',
-        'lastmonthly_run_at': '最后月更新时间',
-        'system_version': '系统版本',
-        'data_update_enabled': '数据自动更新',
-        'notification_enabled': '通知开关',
-    }
-
     version = '1.0.0'
-
     @classmethod
     async def get(cls, key: str, default: str = '') -> str:
         """获取设置项的值"""
@@ -36,6 +33,20 @@ class SystemSettings:
     @classmethod
     async def set(cls, key: str, value: str) -> None:
         """设置项的值"""
+        # 检查是否为只读项
+        valtype = await query_one_value(
+            MdlSysSettings,
+            MdlSysSettings.valtype,
+            MdlSysSettings.key == key
+        )
+
+        if valtype == SettingValueType.READONLY:
+            raise ValueError(f"设置项 '{key}' 为只读项，无法修改")
+
+        # 验证值的类型
+        if valtype is not None:
+            cls._validate_value(value, valtype)
+
         await upsert_one(
             MdlSysSettings,
             {'key': key, 'value': value},
@@ -43,23 +54,74 @@ class SystemSettings:
         )
 
     @classmethod
+    def _validate_value(cls, value: str, valtype: int) -> None:
+        """验证值是否符合类型要求"""
+        if valtype == SettingValueType.BOOLEAN:
+            if value not in ('0', '1', 'true', 'false', 'True', 'False'):
+                raise ValueError(f"开关量的值必须是 0/1 或 true/false")
+        elif valtype == SettingValueType.NUMBER:
+            try:
+                float(value)
+            except ValueError:
+                raise ValueError(f"数值量的值必须是数字")
+        # STRING 类型不需要特殊验证
+
+    @classmethod
     async def get_all(cls) -> Dict[str, str]:
-        """获取所有设置项"""
-        rows = await query_values(MdlSysSettings)
+        """获取所有设置项（仅返回key-value字典）"""
+        rows = await query_values(MdlSysSettings, [MdlSysSettings.key, MdlSysSettings.value])
         return {key: value for key, value in rows}
 
     @classmethod
-    async def get_all_with_description(cls) -> list:
-        """获取所有设置项及其描述"""
-        settings = await cls.get_all()
-        result = []
-        for key, value in settings.items():
-            result.append({
-                'key': key,
-                'value': value,
-                'description': cls.SETTINGS_KEYS.get(key, '未知设置')
+    async def get_all_with_metadata(cls) -> List[Dict[str, Any]]:
+        """获取所有设置项及其元数据，按id排序"""
+        rows = await query_values(MdlSysSettings)
+
+        settings = []
+        for row in rows:
+            settings.append({
+                'id': row.id,
+                'key': row.key,
+                'value': row.value,
+                'name': row.name,
+                'valtype': row.valtype,
+                'valtype_name': cls._get_valtype_name(row.valtype),
+                'editable': row.valtype != SettingValueType.READONLY
             })
-        return result
+        return settings
+
+    @classmethod
+    def _get_valtype_name(cls, valtype: int) -> str:
+        """获取值类型的名称"""
+        type_names = {
+            SettingValueType.READONLY: '只读',
+            SettingValueType.BOOLEAN: '开关',
+            SettingValueType.NUMBER: '数值',
+            SettingValueType.STRING: '字符串'
+        }
+        return type_names.get(valtype, '未知')
+
+    @classmethod
+    async def create(cls, key: str, value: str, name: str, valtype: int) -> None:
+        """创建新的设置项"""
+        # 检查key是否已存在
+        existing = await cls.get(key)
+        if existing:
+            raise ValueError(f"设置项 '{key}' 已存在")
+
+        # 验证valtype
+        if valtype not in [t.value for t in SettingValueType]:
+            raise ValueError(f"无效的值类型: {valtype}")
+
+        # 验证值
+        cls._validate_value(value, valtype)
+
+        # 创建设置项
+        await upsert_one(
+            MdlSysSettings,
+            {'key': key, 'value': value, 'name': name, 'valtype': valtype},
+            ['key']
+        )
 
     @classmethod
     async def delete(cls, key: str) -> None:
@@ -100,12 +162,17 @@ class SystemSettings:
     @classmethod
     async def initialize_defaults(cls) -> None:
         """初始化默认设置"""
-        defaults = {
-            'data_update_enabled': '1',
-            'notification_enabled': '1',
-        }
+        # 预定义的设置项（key, value, name, valtype）
+        defaults = [
+            ('data_update_enabled', '1', '数据自动更新', SettingValueType.BOOLEAN),
+            ('notification_enabled', '1', '通知开关', SettingValueType.BOOLEAN),
+        ]
 
-        for key, value in defaults.items():
+        for key, value, name, valtype in defaults:
             existing = await cls.get(key)
             if not existing:
-                await cls.set(key, value)
+                await upsert_one(
+                    MdlSysSettings,
+                    {'key': key, 'value': value, 'name': name, 'valtype': valtype},
+                    ['key']
+                )
