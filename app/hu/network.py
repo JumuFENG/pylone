@@ -15,15 +15,28 @@ class Network:
         wait=wait_exponential(multiplier=1, min=1, max=5),
         stop=stop_after_attempt(3),
         retry=retry_if_exception_type((requests.Timeout, requests.HTTPError, requests.ConnectionError)))
-    def fetch_url(cls, url: str, params: dict = {}, timeout: int = 10) -> str | None:
-        response = cls.session.get(url, params=params, timeout=timeout)
+    def fetch_url(cls, url: str, headers: dict=None, params: dict = None, timeout: int = 10) -> str | None:
+        if headers is None and params is None:
+            response = cls.session.get(url, timeout=timeout)
+        elif params is None:
+            response = cls.session.get(url, headers=headers, timeout=timeout)
+        elif headers is None:
+            response = cls.session.get(url, params=params, timeout=timeout)
+        else:
+            response = cls.session.get(url, params=params, headers=headers, timeout=timeout)
         response.raise_for_status()
         return response.text
 
 
 class EmRequest():
     def __init__(self) -> None:
-        pass
+        self.headers = {
+            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:138.0) Gecko/20100101 Firefox/138.0',
+            'Accept': '/',
+            'Accept-Language': 'en-US,en;q=0.5',
+            'Accept-Encoding': 'gzip, deflate, br',
+            'Connection': 'keep-alive'
+        }
 
     @retry(
         wait=wait_exponential(multiplier=1, min=1, max=5),
@@ -50,15 +63,8 @@ class EmDataCenterRequest(EmRequest):
         self.page = 1
         self.pageSize = 50
         self.fecthed = []
-        self.headers = {
-            'Host': 'datacenter.eastmoney.com',
-            'Referer': 'https://data.eastmoney.com/yjfp/',
-            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:138.0) Gecko/20100101 Firefox/138.0',
-            'Accept': '/',
-            'Accept-Language': 'en-US,en;q=0.5',
-            'Accept-Encoding': 'gzip, deflate, br',
-            'Connection': 'keep-alive'
-        }
+        self.headers['Host'] = 'datacenter.eastmoney.com'
+        self.headers['Referer'] = 'https://data.eastmoney.com/yjfp/'
 
     def setFilter(self, filter):
         self._filter = filter

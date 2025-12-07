@@ -79,11 +79,13 @@ async def create_single_table(table_name):
 async def main():
     await check_database()
 
-    await create_single_table(MdlStockShare.__tablename__)
+    for table_name in ['stock_bks', 'stock_bk_map', 'stock_changes', 'stock_changes_embk', 'stock_changes_clsbk']:
+        await create_single_table(table_name)
+
     # async with engine.begin() as conn:
     #     await conn.run_sync(Base.metadata.create_all)
 
-    # await create_admin()
+    await create_admin()
 
     await engine.dispose()
 

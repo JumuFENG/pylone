@@ -7,9 +7,9 @@ from stockrt.sources.eastmoney import Em
 from app.hu import classproperty
 from app.lofig import logger
 from app.db import upsert_one, upsert_many, query_one_value, query_aggregate, query_values, delete_records
-from .models import MdlAllStock
+from .models import MdlAllStock, MdlStockBk
 from .schemas import PmStock
-from .history import (Khistory as khis, FflowHistory as fhis)
+from .history import (Khistory as khis, FflowHistory as fhis, StockBkMap)
 from .date import TradingDate
 
 
@@ -133,6 +133,9 @@ class AllStocks:
             if 'time' not in stock:
                 result[c]['time'] = TradingDate.max_trading_date()
             if 'amplitude' not in stock:
+                if stock['lclose'] == 0:
+                    result[c]['amplitude'] = 0
+                    continue
                 result[c]['amplitude'] = (stock['high'] - stock['low']) / stock['lclose']
         unconfirmed = []
         for c, kl in result.items():
@@ -239,3 +242,36 @@ class AllStocks:
         funds.extend(get_stocks(['MK0021', 'MK0022', 'MK0023', 'MK0024'], 'ETF'))
         funds.extend(get_stocks(['MK0404', 'MK0405', 'MK0406', 'MK0407'], 'LOF'))
         await upsert_many(cls.db, funds, ['code'])
+
+
+class AllBlocks:
+    @classproperty
+    def db(cls):
+        return MdlStockBk
+
+    @classproperty
+    def bkmap(cls) -> StockBkMap:
+        return StockBkMap()
+
+    @classmethod
+    async def load_info(cls, code, name=None):
+        update_data = {
+            "code": code
+        }
+        bkname = await query_one_value(cls.db, "name", cls.db.code == code)
+        if name:
+            update_data["name"] = name
+        if bkname is None or (name and bkname != name):
+            await upsert_one(cls.db, update_data, ["code"])
+
+        cls.bkmap.setCode(code)
+        if code.startswith('BK'):
+            cls.bkmap.bkstocks = await AllStocks.get_bkstocks(code)
+            await cls.bkmap.saveFetched()
+        else:
+            await cls.bkmap.getNext()
+
+    @classmethod
+    async def ignore_bk(cls, code):
+        await upsert_one(cls.db, {'code': code, 'chgignore': 1}, ['code'])
+

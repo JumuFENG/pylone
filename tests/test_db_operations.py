@@ -295,12 +295,11 @@ class TestDatabaseOperations(unittest.IsolatedAsyncioTestCase):
         # 带条件查询
         results = await query_values(
             MdlAllStock,
-            [MdlAllStock.code, MdlAllStock.name],
+            MdlAllStock.name,
             MdlAllStock.code == self.test_code
         )
         self.assertEqual(len(results), 1)
-        self.assertEqual(results[0][0], self.test_code)
-        self.assertEqual(results[0][1], "平安银行")
+        self.assertEqual(results[0][0], "平安银行")
 
         # 清理
         await delete_records(MdlAllStock, MdlAllStock.code.in_([self.test_code, self.test_code2]))
@@ -359,5 +358,5 @@ class TestDatabaseOperations(unittest.IsolatedAsyncioTestCase):
 if __name__ == '__main__':
     # unittest.main()
     suite = unittest.TestSuite()
-    suite.addTest(TestDatabaseOperations('test_upsert_many_arr'))
+    suite.addTest(TestDatabaseOperations('test_query_values'))
     unittest.TextTestRunner().run(suite)

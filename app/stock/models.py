@@ -37,8 +37,101 @@ class MdlStockShare(Base):
 class MdlSysSettings(Base):
     __tablename__ = "sys_settings"
 
-    key = Column(String(20), nullable=False, primary_key=True)
+    key = Column(String(32), nullable=False, primary_key=True)
     value = Column(String(255), nullable=False)
+
+
+class MdlStockBk(Base):
+    __tablename__ = "stock_bks"
+
+    code = Column(String(10), nullable=False, primary_key=True)
+    name = Column(String(255), nullable=False, default="")
+    chgignore = Column(SmallInteger, nullable=False, default=0)
+
+
+class MdlStockBkMap(Base):
+    __tablename__ = "stock_bk_map"
+
+    bk = Column(String(10), nullable=False)
+    stock = Column(String(10), nullable=False)
+
+    __table_args__ = (
+        PrimaryKeyConstraint('bk', 'stock', name='pk_stock_bk_map'),
+    )
+
+
+class MdlStockChanges(Base):
+    __tablename__ = "stock_changes"
+
+    code = Column(String(10), nullable=False)
+    time = Column(String(20), nullable=False)
+    chgtype = Column(SmallInteger, nullable=False)
+    info = Column(String(64), nullable=False)
+
+    __table_args__ = (
+        PrimaryKeyConstraint('code', 'time', 'chgtype', name='pk_stock_changes'),
+    )
+
+
+class MdlStockBkChanges(Base):
+    __tablename__ = "stock_changes_embk"
+
+    code = Column(String(10), nullable=False)
+    time = Column(String(20), nullable=False)
+    change = Column(Float, nullable=False)  #板块涨跌幅
+    amount = Column(Float, nullable=False)  #主力净流入
+    ydct = Column(Float, nullable=False)  #异动次数
+    ydpos = Column(Integer, nullable=False)  # 正异动
+    ydabs = Column(Integer, nullable=False)  # 绝对正异动  正异动-负异动
+    ztcnt = Column(Integer, nullable=False)  # 涨停数 封涨停-打开涨停
+    dtcnt = Column(Integer, nullable=False)  # 跌停数 封跌停-打开跌停
+    y4 = Column(Integer, nullable=False, default=0)
+    y8 = Column(Integer, nullable=False, default=0)
+    y16 = Column(Integer, nullable=False, default=0)
+    y32 = Column(Integer, nullable=False, default=0)
+    y64 = Column(Integer, nullable=False, default=0)
+    y128 = Column(Integer, nullable=False, default=0)
+    y8193 = Column(Integer, nullable=False, default=0)
+    y8194 = Column(Integer, nullable=False, default=0)
+    y8201 = Column(Integer, nullable=False, default=0)
+    y8202 = Column(Integer, nullable=False, default=0)
+    y8203 = Column(Integer, nullable=False, default=0)
+    y8204 = Column(Integer, nullable=False, default=0)
+    y8207 = Column(Integer, nullable=False, default=0)
+    y8208 = Column(Integer, nullable=False, default=0)
+    y8209 = Column(Integer, nullable=False, default=0)
+    y8210 = Column(Integer, nullable=False, default=0)
+    y8211 = Column(Integer, nullable=False, default=0)
+    y8212 = Column(Integer, nullable=False, default=0)
+    y8213 = Column(Integer, nullable=False, default=0)
+    y8214 = Column(Integer, nullable=False, default=0)
+    y8215 = Column(Integer, nullable=False, default=0)
+    y8216 = Column(Integer, nullable=False, default=0)
+    y8217 = Column(Integer, nullable=False, default=0)
+    y8218 = Column(Integer, nullable=False, default=0)
+    y8219 = Column(Integer, nullable=False, default=0)
+    y8220 = Column(Integer, nullable=False, default=0)
+    y8221 = Column(Integer, nullable=False, default=0)
+    y8222 = Column(Integer, nullable=False, default=0)
+
+    __table_args__ = (
+        PrimaryKeyConstraint('code', 'time', name='pk_stock_changes_embk'),
+    )
+
+
+class MdlStockBkClsChanges(Base):
+    __tablename__ = "stock_changes_clsbk"
+
+    code = Column(String(10), nullable=False)
+    time = Column(String(20), nullable=False)
+    change = Column(Float, nullable=False)
+    amount = Column(Float, nullable=False)
+    ztcnt = Column(Integer, nullable=False)
+    dtcnt = Column(Integer, nullable=False)
+
+    __table_args__ = (
+        PrimaryKeyConstraint('code', 'time', name='pk_stock_changes_clsbk'),
+    )
 
 
 class UserStocks(Base):
@@ -57,6 +150,7 @@ class UserStocks(Base):
     __table_args__ = (
         PrimaryKeyConstraint('user_id', 'code', name='pk_user_stocks'),
     )
+
 
 class UserStrategy(Base):
     __tablename__ = "user_strategy"

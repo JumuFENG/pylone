@@ -25,7 +25,8 @@ async def query_one_value(model, field, *clauses):
     返回: 字段值
     """
     async with async_session_maker() as session:
-        result = await session.execute(select(getattr(model, field)).where(*clauses))
+        column = getattr(model, field) if isinstance(field, str) else field
+        result = await session.execute(select(column).where(*clauses))
         return result.scalar()
 
 async def query_values(model, fields=None, *clauses):
@@ -35,7 +36,18 @@ async def query_values(model, fields=None, *clauses):
     返回: 结果列表，每个元素是一个元组
     """
     async with async_session_maker() as session:
-        query = select(*fields) if fields else select(model.__table__.columns)
+        if not fields:
+            query = select(model.__table__.columns)
+        elif isinstance(fields, (list, tuple)):
+            if isinstance(fields[0], str):
+                query = select(*[getattr(model, field) for field in fields])
+            else:
+                query = select(*fields)
+        elif isinstance(fields, str):
+            query = select(getattr(model, fields))
+        else:
+            query = select(fields)
+
         if clauses:
             query = query.where(*clauses)
         result = await session.execute(query)
