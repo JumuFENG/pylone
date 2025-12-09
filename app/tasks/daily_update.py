@@ -16,7 +16,7 @@ sys.path.insert(0, os.path.realpath(os.path.dirname(__file__) + '/../..'))
 from app.lofig import Config, logging
 from app.stock.date import TradingDate
 from app.stock.manager import AllStocks
-from app.stock.history import StockShareBonus
+from app.stock.history import StockShareBonus, StockChanges
 logger = logging.getLogger(f'{Config.app_name}.{__package__}')
 
 
@@ -192,9 +192,8 @@ class DailyUpdater():
 
     @classmethod
     def update_stock_changes(cls):
-        # sch = StockChangesHistory()
-        # sch.updateDaily()
-        pass
+        sch = StockChanges()
+        sch.updateDaily()
 
     def update_fixzdt(self):
         self.fetch_zdt_stocks()

@@ -41,33 +41,33 @@ def verify_validation():
 
     # 测试开关量验证
     try:
-        SystemSettings._validate_value('1', SettingValueType.BOOLEAN)
+        SystemSettings.validate_value('1', SettingValueType.BOOLEAN)
         print("✓ 开关量验证 '1': 通过")
     except ValueError as e:
         print(f"✗ 开关量验证 '1': 失败 - {e}")
 
     try:
-        SystemSettings._validate_value('invalid', SettingValueType.BOOLEAN)
+        SystemSettings.validate_value('invalid', SettingValueType.BOOLEAN)
         print("✗ 开关量验证 'invalid': 应该失败但通过了")
     except ValueError:
         print("✓ 开关量验证 'invalid': 正确拒绝")
 
     # 测试数值量验证
     try:
-        SystemSettings._validate_value('123.45', SettingValueType.NUMBER)
+        SystemSettings.validate_value('123.45', SettingValueType.NUMBER)
         print("✓ 数值量验证 '123.45': 通过")
     except ValueError as e:
         print(f"✗ 数值量验证 '123.45': 失败 - {e}")
 
     try:
-        SystemSettings._validate_value('abc', SettingValueType.NUMBER)
+        SystemSettings.validate_value('abc', SettingValueType.NUMBER)
         print("✗ 数值量验证 'abc': 应该失败但通过了")
     except ValueError:
         print("✓ 数值量验证 'abc': 正确拒绝")
 
     # 测试字符串量验证
     try:
-        SystemSettings._validate_value('any string', SettingValueType.STRING)
+        SystemSettings.validate_value('any string', SettingValueType.STRING)
         print("✓ 字符串量验证: 通过")
     except ValueError as e:
         print(f"✗ 字符串量验证: 失败 - {e}")

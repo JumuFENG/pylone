@@ -1,7 +1,7 @@
 import bisect
 import json
 import requests
-from datetime import datetime
+import datetime
 from app.hu import classproperty, lru_cache
 from .h5 import KLineStorage as kls
 
@@ -9,7 +9,7 @@ from .h5 import KLineStorage as kls
 class TradingDate():
     @staticmethod
     def today(sep='-'):
-        return datetime.now().strftime(f'%Y{sep}%m{sep}%d')
+        return datetime.datetime.now().strftime(f'%Y{sep}%m{sep}%d')
 
     @classproperty
     def trading_dates(self):
@@ -37,6 +37,19 @@ class TradingDate():
         if date == self.max_trading_date():
             return True
         return date in self.trading_dates
+
+    @classmethod
+    def is_trading_time(self):
+        """根据当前时间判断是否为交易时段（示例：上交所/深交所）"""
+        if TradingDate.is_holiday(self.today()):
+            return False
+
+        now = datetime.datetime.now().time()
+
+        morning = (datetime.time(9, 30), datetime.time(11, 30))
+        afternoon = (datetime.time(13, 0), datetime.time(15, 0))
+
+        return (morning[0] <= now <= morning[1]) or (afternoon[0] <= now <= afternoon[1])
 
     @classmethod
     @lru_cache(maxsize=1)

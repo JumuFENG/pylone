@@ -20,9 +20,13 @@ class SettingValueType(IntEnum):
 class SystemSettings:
     """系统设置管理类"""
     version = '1.0.0'
+    settings = {}
+
     @classmethod
     async def get(cls, key: str, default: str = '') -> str:
         """获取设置项的值"""
+        if key in cls.settings:
+            return cls.settings[key]
         value = await query_one_value(
             MdlSysSettings,
             MdlSysSettings.value,
@@ -33,19 +37,8 @@ class SystemSettings:
     @classmethod
     async def set(cls, key: str, value: str) -> None:
         """设置项的值"""
-        # 检查是否为只读项
-        valtype = await query_one_value(
-            MdlSysSettings,
-            MdlSysSettings.valtype,
-            MdlSysSettings.key == key
-        )
-
-        if valtype == SettingValueType.READONLY:
-            raise ValueError(f"设置项 '{key}' 为只读项，无法修改")
-
-        # 验证值的类型
-        if valtype is not None:
-            cls._validate_value(value, valtype)
+        if key in cls.settings and cls.settings[key] == value:
+            return
 
         await upsert_one(
             MdlSysSettings,
@@ -53,8 +46,15 @@ class SystemSettings:
             ['key']
         )
 
+        cls.settings[key] = value
+
     @classmethod
-    def _validate_value(cls, value: str, valtype: int) -> None:
+    async def query_value_type(cls, key: str) -> Optional[int]:
+        """查询设置项的值类型"""
+        return await query_one_value(MdlSysSettings, MdlSysSettings.valtype, MdlSysSettings.key == key)
+
+    @classmethod
+    def validate_value(cls, value: str, valtype: int) -> None:
         """验证值是否符合类型要求"""
         if valtype == SettingValueType.BOOLEAN:
             if value not in ('0', '1', 'true', 'false', 'True', 'False'):
@@ -70,7 +70,8 @@ class SystemSettings:
     async def get_all(cls) -> Dict[str, str]:
         """获取所有设置项（仅返回key-value字典）"""
         rows = await query_values(MdlSysSettings, [MdlSysSettings.key, MdlSysSettings.value])
-        return {key: value for key, value in rows}
+        cls.settings = {key: value for key, value in rows}
+        return cls.settings
 
     @classmethod
     async def get_all_with_metadata(cls) -> List[Dict[str, Any]]:
@@ -114,7 +115,7 @@ class SystemSettings:
             raise ValueError(f"无效的值类型: {valtype}")
 
         # 验证值
-        cls._validate_value(value, valtype)
+        cls.validate_value(value, valtype)
 
         # 创建设置项
         await upsert_one(
@@ -164,8 +165,11 @@ class SystemSettings:
         """初始化默认设置"""
         # 预定义的设置项（key, value, name, valtype）
         defaults = [
-            ('data_update_enabled', '1', '数据自动更新', SettingValueType.BOOLEAN),
-            ('notification_enabled', '1', '通知开关', SettingValueType.BOOLEAN),
+            ('lastdaily_run_at', '', '每日更新于', SettingValueType.READONLY),
+            ('lastweekly_run_at', '', '每周更新于', SettingValueType.READONLY),
+            ('lastmonthly_run_at', '', '每月更新于', SettingValueType.READONLY),
+            ('realtime_kline_enabled', '1', '实盘数据', SettingValueType.BOOLEAN),
+            ('bkchanges_update_realtime', '1', '板块异动', SettingValueType.BOOLEAN),
         ]
 
         for key, value, name, valtype in defaults:

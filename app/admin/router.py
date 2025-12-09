@@ -100,6 +100,15 @@ async def update_system_setting(
     user=Depends(current_superuser)
 ):
     """更新系统设置"""
+    # 检查是否为只读项
+    valtype = await SystemSettings.query_value_type(key)
+
+    if valtype is None or int(valtype) == 0:
+        raise ValueError(f"设置项 '{key}' 为只读项，无法修改")
+
+    # 验证值的类型
+    SystemSettings.validate_value(value, valtype)
+
     await SystemSettings.set(key, value)
     return {"message": "设置已更新"}
 

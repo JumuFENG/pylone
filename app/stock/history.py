@@ -11,6 +11,7 @@ from app.lofig import logger
 from app.hu import classproperty, time_stamp
 from app.hu.network import Network, EmRequest, EmDataCenterRequest
 from app.db import query_one_value, query_values, query_aggregate, upsert_one, upsert_many, insert_many, delete_records
+from . import dynamic_cache
 from .h5 import (KLineStorage as kls, FflowStorage as ffs)
 from .date import TradingDate
 from .models import (
@@ -666,6 +667,12 @@ class BkChanges(EmRequest):
         keys = [col.name for col in self.model_class.__table__.columns]
         return [dict(zip(keys, x)) for x in changes]
 
+    async def saveChanges(self, changes):
+        """保存异动数据到数据库"""
+        if len(changes) == 0:
+            return
+        await upsert_many(self.model_class, self.changesToDict(changes), ['code', 'time'])
+
     async def dumpTopBks(self, date, min_change=2, min_amount=0, min_ztcnt=5):
         """提取符合条件的板块（参数化阈值）"""
         ndate = TradingDate.next_trading_date(date)
@@ -753,7 +760,8 @@ class StockBkChanges(BkChanges):
                 self.fecthed.append(ydrow)
                 self.exist_changes.add((code, ftm))
 
-    async def getLatestChanges(self, save_db=True):
+    @dynamic_cache(ttl=10)
+    async def getLatestChanges(self):
         self.fecthed = []
         self.exist_changes = set()
         self.page = 0
@@ -790,8 +798,6 @@ class StockBkChanges(BkChanges):
                 bkchanges.append(x)
                 bkset.add(x[0])
 
-        if save_db:
-            await upsert_many(self.model_class, self.changesToDict(bkchanges), ['code', 'time'])
         return bkchanges
 
     async def updateBkChangedIn5Days(self):
@@ -805,7 +811,7 @@ class StockBkChanges(BkChanges):
 
         ibks = set(ibks)
         if len(self.fecthed) == 0:
-            await self.getLatestChanges(False)
+            await self.getLatestChanges()
 
         bkchanges5 = []
         for x in self.fecthed:
@@ -864,7 +870,8 @@ class StockClsBkChanges(BkChanges):
             self.fecthed.append([code, ftm, pchange, amount, ztcnt, dtcnt])
             self.exist_changes.add((code, ftm))
 
-    async def getLatestChanges(self, save_db=True):
+    @dynamic_cache(ttl=10)
+    async def getLatestChanges(self):
         ways = ['change', 'main_fund_diff', 'limit_up_num']
         self.fecthed = []
         self.exist_changes = set()
@@ -904,8 +911,6 @@ class StockClsBkChanges(BkChanges):
                 self.fecthed.append(x)
                 bkset.add(x[0])
 
-        if save_db:
-            await upsert_many(self.model_class, self.changesToDict(self.fecthed), ['code', 'time'])
         return self.fecthed
 
     async def updateBkChangedIn5Days(self):

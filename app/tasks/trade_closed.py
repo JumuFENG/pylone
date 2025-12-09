@@ -10,10 +10,9 @@ sys.path.insert(0, os.path.realpath(os.path.dirname(__file__) + '/../..'))
 # from phon.data.user import User
 # from utils import Utils, datetime, shared_cloud_foler
 from datetime import datetime
-from app.stock.history import StockBkChanges, StockClsBkChanges
 # from tasks import StockMarket_Stats_Task
 from app.stock.date import TradingDate
-from app.stock.manager import AllStocks
+from app.stock.manager import AllStocks, AllBlocks
 from app.lofig import Config, logging
 logger = logging.getLogger(f'{Config.app_name}.{__package__}')
 
@@ -47,10 +46,7 @@ async def save_earning_task():
 
 async def update_bkchanges_history():
     try:
-        bkchghis = StockBkChanges()
-        await bkchghis.updateBkChangedIn5Days()
-        clsbkhis = StockClsBkChanges()
-        await clsbkhis.updateBkChangedIn5Days()
+        AllBlocks.updateBkChangedIn5Days()
     except Exception as e:
         logger.error(f'Error updating bk changes history: {e}')
         logger.error(format_exc())
@@ -77,5 +73,5 @@ if __name__ == '__main__':
     async def run_me():
         await save_earning_task()
         await update_bkchanges_history()
-        # await update_daily_trade_closed_history()
+        await update_daily_trade_closed_history()
     asyncio.run(run_me())

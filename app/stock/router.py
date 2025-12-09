@@ -16,6 +16,8 @@ async def stock_get(act: str = Query(..., embed=True)):
     if act == "bk_ignored":
         bks = await AllBlocks.read_ignored()
         return [b for b, in bks]
+    if act == "rtbkchanges":
+        return await AllBlocks.updateBkChanged()
     return {"message": f"Hello {act}"}
 
 @router.post("", openapi_extra=pparam_doc([("act", "string", "act", True)]))

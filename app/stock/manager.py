@@ -9,7 +9,7 @@ from app.lofig import logger
 from app.db import upsert_one, upsert_many, query_one_value, query_aggregate, query_values, delete_records
 from .models import MdlAllStock, MdlStockBk
 from .schemas import PmStock
-from .history import (Khistory as khis, FflowHistory as fhis, StockBkMap)
+from .history import (Khistory as khis, FflowHistory as fhis, StockBkMap, StockBkChanges, StockClsBkChanges)
 from .date import TradingDate
 
 
@@ -120,6 +120,11 @@ class AllStocks:
 
         :return: 有最新价但是与数据库中保存的数据不连续的股票列表，需单独获取股票K线
         '''
+        # TODO: Testing, remove later
+        is_test = True
+        if is_test:
+            logger.warning('testing, skip!')
+            return cns.keys()
         srt.set_default_sources('stock_list', 'stocklistapi', ('eastmoney', 'sina'), False)
         stock_list = srt.stock_list()
         if 'all' not in stock_list:
@@ -253,6 +258,14 @@ class AllBlocks:
     def bkmap(cls) -> StockBkMap:
         return StockBkMap()
 
+    @classproperty
+    def bkchanges(cls) -> StockBkChanges:
+        return StockBkChanges()
+
+    @classproperty
+    def clsbkchanges(cls) -> StockClsBkChanges:
+        return StockClsBkChanges()
+
     @classmethod
     async def read_all(cls):
         return await query_values(cls.db)
@@ -283,3 +296,13 @@ class AllBlocks:
     async def ignore_bk(cls, code, ignore=1):
         await upsert_one(cls.db, {'code': code, 'chgignore': ignore}, ['code'])
 
+    @classmethod
+    async def updateBkChanged(cls):
+        bk_chgs = await cls.bkchanges.getLatestChanges()
+        bk_chgs += await cls.clsbkchanges.getLatestChanges()
+        return bk_chgs
+
+    @classmethod
+    async def updateBkChangedIn5Days(cls):
+        await cls.bkchanges.updateBkChangedIn5Days()
+        await cls.clsbkchanges.updateBkChangedIn5Days()
