@@ -156,9 +156,9 @@ class BkChangesTask(TimerTask):
         super().__init__(600, '9:30:40', '15:1:6', [('11:30:01', '12:50:40')])
 
     async def execute_task(self):
-        bkchanges = await AllBlocks.bkchanges.getLatestChanges(True)
+        bkchanges = await AllBlocks.bkchanges.getLatestChanges()
         await AllBlocks.bkchanges.saveChanges(bkchanges)
-        clsbkchanges = await AllBlocks.clsbkchanges.getLatestChanges(True)
+        clsbkchanges = await AllBlocks.clsbkchanges.getLatestChanges()
         await AllBlocks.clsbkchanges.saveChanges(clsbkchanges)
 
 
@@ -275,5 +275,5 @@ class Timers:
         cls.add_timer_task(cls.run_regular_tasks, '8:47:00', '9:11:00')
         cls.add_timer_task(bk_changes_prepare_task, '9:16:00', '15:00:00')
         cls.add_timer_task(cls.run_regular_tasks, '16:58:00', '23:59:00')
-        # cls.add_timer_task(update_bkchanges_history, '15:01:04')
-        # cls.add_timer_task(save_earning_task, '15:02:03')
+        cls.add_timer_task(update_bkchanges_history, '15:01:04')
+        cls.add_timer_task(save_earning_task, '15:02:03')

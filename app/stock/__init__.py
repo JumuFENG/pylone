@@ -6,7 +6,7 @@ from functools import wraps, lru_cache
 from .date import TradingDate
 
 
-offline_cache = LRUCache(maxsize=3000)           # 休市：LRU缓存即可
+offline_cache = LRUCache(maxsize=3000)
 
 @lru_cache(maxsize=10)
 def get_short_cache(ttl=None):

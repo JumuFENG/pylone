@@ -140,7 +140,7 @@ class SystemSettings:
                 'python_version': platform.python_version(),
                 'hostname': platform.node(),
                 'processor': platform.processor(),
-                'app_name': Config.app_name,
+                'app_name': Config.client_config().get('app_name', 'pyswee'),
                 'system_version': cls.version,
             }
         except Exception as e:

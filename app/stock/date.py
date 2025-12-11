@@ -52,6 +52,14 @@ class TradingDate():
         return (morning[0] <= now <= morning[1]) or (afternoon[0] <= now <= afternoon[1])
 
     @classmethod
+    def trading_started(self):
+        if TradingDate.is_holiday(self.today()):
+            return False
+
+        now = datetime.datetime.now().time()
+        return now >= datetime.time(9, 30)
+
+    @classmethod
     @lru_cache(maxsize=1)
     def get_today_system_date(self):
         url = 'http://www.sse.com.cn/js/common/systemDate_global.js'

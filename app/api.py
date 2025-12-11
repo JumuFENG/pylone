@@ -5,9 +5,12 @@ import base64
 from app import PostParams, pparam_doc
 from app.hu import img_to_text
 from app.hu.network import Network
+from app.admin.system_settings import SystemSettings
 from .stock.history import Khistory as khis
 from .stock.date import TradingDate
 from .stock.manager import AllStocks, AllBlocks
+from .stock.quotes import Quotes as qot
+
 
 router = APIRouter(
     prefix="/api",
@@ -25,17 +28,39 @@ async def tradingdates(len: int = Query(30, gt=0)):
 
 @router.get("/stockhist")
 async def stock_hist(
-    code: str = Query(..., min_length=6, max_length=8),
+    code: str = Query(..., min_length=6),
     kltype: str = Query(...),
     fqt: int = Query(0, ge=0),
     length: int = Query(None, ge=0),
     start: str = Query(None, min_length=8, max_length=10)
 ):
     try:
-        data = await khis.read_kline(code, kltype, fqt, length, start)
-        return data.tolist()
+        if ',' in code:
+            code = code.split(',')
+        else:
+            code = [code]
+
+        result = {}
+        for c in code:
+            data = await khis.read_kline(c, kltype, 0, length, start)
+            result[c] = data.tolist()
+
+        realtime_kline_enabled = await SystemSettings.get('realtime_kline_enabled', '0')
+        if realtime_kline_enabled == '1':
+            qklines = qot.get_klines(code, kltype)
+            for c, kl in qklines.items():
+                if c not in result:
+                    result[c] = kl
+                    continue
+                if result[c][-1][0] < kl[0][0]:
+                    result[c].extend(kl)
+        if fqt > 0:
+            for c, kl in result.items():
+                result[c] = await khis.fix_price(c, kl, fqt)
+        return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
 
 @router.get("/stockzthist")
 async def stock_zthist(

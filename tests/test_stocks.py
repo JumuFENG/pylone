@@ -12,6 +12,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from app.lofig import Config
 from app.stock.manager import AllStocks
 from app.stock.history import Khistory as khis, FflowHistory as fhis
+from app.stock.quotes import Quotes as qot
 
 class TestStocks(unittest.IsolatedAsyncioTestCase):
     async def test_load_index(self):
@@ -151,8 +152,36 @@ class TestStocks(unittest.IsolatedAsyncioTestCase):
         # 验证返回的unconfirmed列表包含数据不连续的股票
         self.assertEqual(unconfirmed, ['000002'])
 
+    async def test_quote_get_quote(self):
+        code = '600000'
+        q = qot.get_quotes(code)
+        self.assertIsNotNone(q)
+        self.assertTrue(code in q)
+
+        code = ['600000', '600001']
+        q = qot.get_quotes(','.join(code))
+        self.assertIsNotNone(q)
+        self.assertTrue(all(c in q for c in code))
+
+    async def test_quote_get_dkline(self):
+        code = '600000'
+        kl = qot.get_klines(code, 'd')
+        self.assertIsNotNone(kl)
+        self.assertTrue(code in kl)
+        self.assertTrue(isinstance(kl[code], list))
+        self.assertEqual(len(kl[code]), 1)
+
+    async def test_quote_get_m1kline(self):
+        code = '600000'
+        kl = qot.get_klines(code, '1')
+        self.assertIsNotNone(kl)
+        self.assertTrue(code in kl)
+        self.assertTrue(isinstance(kl[code], list))
+        self.assertGreater(len(kl[code]), 1)
+
+
 if __name__ == '__main__':
     # unittest.main()
     suite = unittest.TestSuite()
-    suite.addTest(TestStocks('test_update_kline_data'))
+    suite.addTest(TestStocks('test_quote_get_m1kline'))
     unittest.TextTestRunner().run(suite)

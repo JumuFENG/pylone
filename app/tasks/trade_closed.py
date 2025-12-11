@@ -13,6 +13,7 @@ from datetime import datetime
 # from tasks import StockMarket_Stats_Task
 from app.stock.date import TradingDate
 from app.stock.manager import AllStocks, AllBlocks
+from app.admin.system_settings import SystemSettings
 from app.lofig import Config, logging
 logger = logging.getLogger(f'{Config.app_name}.{__package__}')
 
@@ -46,7 +47,7 @@ async def save_earning_task():
 
 async def update_bkchanges_history():
     try:
-        AllBlocks.updateBkChangedIn5Days()
+        await AllBlocks.updateBkChangedIn5Days()
     except Exception as e:
         logger.error(f'Error updating bk changes history: {e}')
         logger.error(format_exc())
@@ -58,6 +59,12 @@ async def update_daily_trade_closed_history():
         await AllStocks.update_kline_data('d', sectype='Index')
         TradingDate.clear_cache()
         await AllStocks.update_kline_data('d')
+        if await SystemSettings.get('daily_15min', '0') == '1':
+            await AllStocks.update_kline_data(15)
+        if await SystemSettings.get('daily_5min', '0') == '1':
+            await AllStocks.update_kline_data(5)
+        if await SystemSettings.get('daily_1min', '0') == '1':
+            await AllStocks.update_kline_data(1)
     except Exception as e:
         logger.error(f'Error updating daily history data: {e}')
         logger.error(format_exc())
