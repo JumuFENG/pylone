@@ -12,11 +12,10 @@ sys.path.insert(0, os.path.realpath(os.path.dirname(__file__) + '/../..'))
 # from history import *
 # from pickup import *
 # from phon.data.user import User
-# from phon.data.history import AllIndexes, AllStocks, TradingDate
 from app.lofig import Config, logging
 from app.stock.date import TradingDate
-from app.stock.manager import AllStocks
-from app.stock.history import StockShareBonus, StockChanges
+from app.stock.manager import AllStocks, AllBlocks
+from app.stock.history import StockShareBonus, StockChanges, StockBkMap, StockZtDaily, StockZtConcepts
 logger = logging.getLogger(f'{Config.app_name}.{__package__}')
 
 
@@ -56,7 +55,7 @@ class DailyUpdater():
             # 更新所有股票都日k数据
             cls.download_all_stocks_khistory()
             # 涨跌停数据，可以间隔，早晚都合适
-            cls.fetch_zdt_stocks()
+            await cls.fetch_zdt_stocks()
             # 盘口异动数据, 每个交易日收盘后更新, 错过无法补录
             cls.update_stock_changes()
             #
@@ -124,21 +123,20 @@ class DailyUpdater():
         #     logger.info(e)
 
     @classmethod
-    def fetch_zdt_stocks(cls):
+    async def fetch_zdt_stocks(cls):
         logger.info('update ST bk stocks')
-        # try:
-        #     stbk = StockEmBk('BK0511')
-        #     stbk.getNext()
-        # except Exception as e:
-        #     logger.info(e)
+        try:
+            await AllBlocks.load_info('BK0511')
+        except Exception as e:
+            logger.info(e)
 
-        # logger.info('update zt info')
-        # ztinfo = StockZtDaily()
-        # ztinfo.getNext()
+        logger.info('update zt info')
+        ztinfo = StockZtDaily()
+        await ztinfo.update_pickups()
 
-        # logger.info('update zt concepts')
-        # ztcpt = StockZtConcepts()
-        # ztcpt.getNext()
+        logger.info('update zt concepts')
+        ztcpt = StockZtConcepts()
+        await ztcpt.getNext()
 
         # logger.info('update dt info')
         # dtinfo = StockDtInfo()
@@ -195,8 +193,8 @@ class DailyUpdater():
         sch = StockChanges()
         sch.updateDaily()
 
-    def update_fixzdt(self):
-        self.fetch_zdt_stocks()
+    async def update_fixzdt(self):
+        await self.fetch_zdt_stocks()
         self.update_stock_changes()
         self.update_selectors()
         self.update_twice_selectors()

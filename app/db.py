@@ -1,5 +1,5 @@
 from typing import AsyncGenerator
-from sqlalchemy import select, delete, func
+from sqlalchemy import select, delete, func, or_
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker, declarative_base
 from app.lofig import Config
@@ -75,6 +75,18 @@ async def query_aggregate(func_type, model, field, *clauses):
             query = query.where(*clauses)
         result = await session.execute(query)
         return result.scalar()
+
+def array_to_dict_list(model, arrlist):
+    """
+    将查询结果转换为字典列表
+    model: model
+    arrlist: 查询结果列表，每个元素是一个元组
+    返回: 字典列表
+    """
+    if not arrlist:
+        return []
+    keys = [col.name for col in model.__table__.columns]
+    return [dict(zip(keys, x)) for x in arrlist]
 
 async def upsert_one(model, data, unique_fields):
     """

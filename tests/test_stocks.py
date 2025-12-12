@@ -179,9 +179,18 @@ class TestStocks(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(isinstance(kl[code], list))
         self.assertGreater(len(kl[code]), 1)
 
+    async def test_zdt_info(self):
+        from app.stock.history import StockZtInfo, StockDtInfo, StockZtDaily
+        # zt = StockZtInfo()
+        # await zt.getNext()
+        # dt = StockDtInfo()
+        # await dt.getNext()
+        z1 = StockZtDaily()
+        await z1.start_multi_task()
+
 
 if __name__ == '__main__':
     # unittest.main()
     suite = unittest.TestSuite()
-    suite.addTest(TestStocks('test_quote_get_m1kline'))
+    suite.addTest(TestStocks('test_zdt_info'))
     unittest.TextTestRunner().run(suite)

@@ -137,6 +137,55 @@ class MdlStockBkClsChanges(Base):
     )
 
 
+class MdlDayZtStocks(Base):
+    __tablename__ = "day_zt_stocks"
+
+    code = Column(String(10), nullable=False)
+    time = Column(String(20), nullable=False)
+    fund = Column(Float, nullable=False) #涨停封单
+    hsl = Column(Float, nullable=False) #换手率
+    lbc = Column(Integer, nullable=False) #连板数
+    days = Column(Integer, nullable=False) #总天数
+    zbc = Column(Integer, nullable=False) #炸板数
+    bk = Column(String(63), nullable=False) #板块
+    cpt = Column(String(255), nullable=False) #概念
+    mkt = Column(SmallInteger, nullable=False) #市场 0:主板 1:科创创业 2:北交所 3:ST
+
+    __table_args__ = (
+        PrimaryKeyConstraint('code', 'time', name='pk_day_zt_stocks'),
+    )
+
+
+class MdlDayDtStocks(Base):
+    __tablename__ = "day_dt_stocks"
+
+    code = Column(String(10), nullable=False)
+    time = Column(String(20), nullable=False)
+    fund = Column(Float, nullable=False) #跌停封单
+    fba = Column(Float, nullable=False) #板上成交额
+    hsl = Column(Float, nullable=False) #换手率
+    lbc = Column(Integer, nullable=False) #连板数
+    zbc = Column(Integer, nullable=False) #炸板数/开板数
+    bk = Column(String(63), nullable=False) #板块
+    mkt = Column(SmallInteger, nullable=False) #市场 0:主板 1:科创创业 2:北交所 3:ST
+
+    __table_args__ = (
+        PrimaryKeyConstraint('code', 'time', name='pk_day_dt_stocks'),
+    )
+
+
+class MdlDayZtConcepts(Base):
+    __tablename__ = "day_zt_concepts"
+
+    time = Column(String(20), nullable=False)
+    cpt = Column(String(255), nullable=False)
+    ztcnt = Column(Integer, nullable=False)
+
+    __table_args__ = (
+        PrimaryKeyConstraint('time', 'cpt', name='pk_day_zt_concepts'),
+    )
+
+
 class UserStocks(Base):
     __tablename__ = "user_stocks"
 

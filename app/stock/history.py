@@ -1,21 +1,28 @@
 import sys
 import re
 import json
+import asyncio
 import numpy as np
 from datetime import datetime
 from bs4 import BeautifulSoup
 from traceback import format_exc
+from typing import Optional
 from numpy.lib.recfunctions import append_fields
 from stockrt.sources.rtbase import rtbase
 from app.lofig import logger
 from app.hu import classproperty, time_stamp
 from app.hu.network import Network, EmRequest, EmDataCenterRequest
-from app.db import query_one_value, query_values, query_aggregate, upsert_one, upsert_many, insert_many, delete_records
-from . import dynamic_cache
+from app.db import (
+    or_,
+    array_to_dict_list, query_one_value, query_values, query_aggregate,
+    upsert_one, upsert_many, insert_many, delete_records)
+from . import dynamic_cache, async_lru, zt_priceby, zdf_from_code
 from .h5 import (KLineStorage as kls, FflowStorage as ffs)
 from .date import TradingDate
 from .models import (
-    MdlStockShare, MdlAllStock, MdlStockBk, MdlStockBkMap, MdlStockChanges, MdlStockBkChanges, MdlStockBkClsChanges)
+    MdlStockShare, MdlAllStock, MdlStockBk, MdlStockBkMap, MdlStockChanges, MdlStockBkChanges, MdlStockBkClsChanges,
+    MdlDayZtStocks, MdlDayDtStocks, MdlDayZtConcepts)
+from .schemas import KNode
 
 
 class Khistory:
@@ -464,6 +471,103 @@ class FundShareBonus(StockShareBonus):
         return await query_values(self.db, None, MdlStockShare.code == code)
 
 
+class StockBaseSelector():
+    def __init__(self, max_workers: int = 2) -> None:
+        self.max_workers = max_workers
+        self.wkstocks = []
+        self.wkselected = []
+
+    @property
+    def db(self):
+        pass
+
+    async def task_prepare(self, date: Optional[str] = None) -> None:
+        """准备任务"""
+        if date is None:
+            self.wkstocks = await query_values(
+                MdlAllStock, [MdlAllStock.code, MdlAllStock.setup_date],
+                or_(MdlAllStock.typekind == 'ABStock',MdlAllStock.typekind == 'TSStock', MdlAllStock.typekind == 'BJStock'))
+            self.wkstocks = [[c, d] for c, d in self.wkstocks]
+        else:
+            stks = await query_values(MdlAllStock, [MdlAllStock.code], or_(MdlAllStock.typekind == 'ABStock', MdlAllStock.typekind == 'BJStock'))
+            self.wkstocks = [[c, date] for c, in stks]
+        self.wkselected = []
+
+    async def post_process(self) -> None:
+        """后处理"""
+        if len(self.wkselected) > 0:
+            await insert_many(self.db, array_to_dict_list(self.db, self.wkselected), ['code', 'time'])
+
+    async def task_processing(self, worker_id: int) -> None:
+        """任务处理逻辑"""
+        pass
+
+    async def start_multi_task(self, date: Optional[str] = None) -> None:
+        """
+        启动异步任务
+
+        Args:
+            date: 可选日期参数
+        """
+        # 准备阶段
+        await self.task_prepare(date)
+
+        ctime = datetime.now()
+
+        if self.max_workers <= 1:
+            await self.task_processing(0)
+        else:
+            tasks = []
+            for i in range(self.max_workers):
+                task = asyncio.create_task(
+                    asyncio.to_thread(self.task_processing, i)
+                )
+                tasks.append(task)
+            await asyncio.gather(*tasks)
+
+        # 记录执行时间
+        elapsed = datetime.now() - ctime
+        logger.info(f'异步任务完成，工作线程数: {self.max_workers}，耗时: {elapsed}')
+
+        # 后处理
+        await self.post_process()
+
+    async def update_pickups(self):
+        mdate = await query_aggregate('max', self.db, 'time')
+        if mdate == TradingDate.max_trading_date():
+            logger.info('%s update_pickups already updated to latest!', self.__class__.__name__)
+            return
+        await self.start_multi_task(mdate)
+
+    async def get_kd_data(self, code:str, start:str, fqt:int=0):
+        if not TradingDate.is_trading_date(start):
+            start = TradingDate.next_trading_date(start)
+        kd = await Khistory.read_kline(code, 'd', start=start, fqt=fqt)
+        if kd is None or len(kd) == 0:
+            return None
+        def safe_get(record, field_name, default=0.0):
+            if field_name in record.dtype.names:
+                value = record[field_name]
+                if value is None or (isinstance(value, float) and np.isnan(value)):
+                    return default
+                return float(value)
+            return default
+
+        return [KNode(
+            time=kl['time'],
+            open=kl['open'],
+            close=kl['close'],
+            high=kl['high'],
+            low=kl['low'],
+            volume=safe_get(kl, 'volume', 0),
+            amount=safe_get(kl, 'amount', 0),
+            change=safe_get(kl, 'change', 0),
+            change_px=safe_get(kl, 'change_px', 0),
+            amplitude=safe_get(kl, 'amplitude', 0),
+            turnover=safe_get(kl, 'turnover', 0)
+        ) for kl in kd]
+
+
 class FflowRequest(EmRequest):
     def __init__(self):
         super().__init__()
@@ -660,18 +764,11 @@ class BkChanges(EmRequest):
             self.allBks = [bk for bk, _ in bks]
             self.ignoredBks = [bk for bk, _ignored in bks if _ignored == 1]
 
-    def changesToDict(self, changes):
-        """通用的转换方法"""
-        if not changes:
-            return []
-        keys = [col.name for col in self.model_class.__table__.columns]
-        return [dict(zip(keys, x)) for x in changes]
-
     async def saveChanges(self, changes):
         """保存异动数据到数据库"""
         if len(changes) == 0:
             return
-        await upsert_many(self.model_class, self.changesToDict(changes), ['code', 'time'])
+        await upsert_many(self.model_class, array_to_dict_list(self.model_class, changes), ['code', 'time'])
 
     async def dumpTopBks(self, date, min_change=2, min_amount=0, min_ztcnt=5):
         """提取符合条件的板块（参数化阈值）"""
@@ -818,7 +915,7 @@ class StockBkChanges(BkChanges):
             if x[0] in ibks:
                 bkchanges5.append(x)
 
-        await upsert_many(self.model_class, self.changesToDict(bkchanges5), ['code', 'time'])
+        await upsert_many(self.model_class, array_to_dict_list(self.model_class, bkchanges5), ['code', 'time'])
 
 
 class StockClsBkChanges(BkChanges):
@@ -942,4 +1039,406 @@ class StockClsBkChanges(BkChanges):
             bkvalues.append([code, ftm, pchange, amount, ztcnt, dtcnt])
 
         if len(bkvalues) > 0:
-            await upsert_many(self.model_class, self.changesToDict(bkvalues), ['code', 'time'])
+            await upsert_many(self.model_class, array_to_dict_list(self.model_class, bkvalues), ['code', 'time'])
+
+
+class StockZtInfo10jqka(EmRequest):
+    '''涨停
+    ref: http://data.10jqka.com.cn/datacenterph/limitup/limtupInfo.html
+    '''
+    def __init__(self) -> None:
+        super().__init__()
+        self.date = None
+        self.pageSize = 15
+        self.headers['Referer'] = 'http://data.10jqka.com.cn/datacenterph/limitup/limtupInfo.html'
+        self.headers['Host'] = 'data.10jqka.com.cn'
+        self.headers['Accept'] = 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
+
+    def getUrl(self):
+        if self.date is None:
+            self.date = TradingDate.today()
+        url = f'http://data.10jqka.com.cn/dataapi/limit_up/limit_up_pool?page={self.page}&limit={self.pageSize}&field=199112,330329,9001,330325,9002,133971,133970,1968584&filter=HS,GEM2STAR,ST&order_field=199112&order_type=0&date={self.date.replace("-", "")}'
+        return url
+
+    def getNext(self, date=None):
+        self.date = date
+        self.page = 1
+        ztdata = []
+        while True:
+            jqkback = json.loads(self.getRequest(self.headers))
+            if jqkback is None or jqkback['status_code'] != 0 or jqkback['data'] is None:
+                logger.info('StockZtInfo invalid response! %s', jqkback)
+                return
+
+            rdate = jqkback['data']['date']
+            rdate = rdate[0:4] + '-' + rdate[4:6] + '-' + rdate[6:8]
+            for ztobj in jqkback['data']['info']:
+                mt = ztobj['market_type']
+                code = ztobj['code']
+                code = rtbase.get_fullcode(code) # code
+                hsl = ztobj['turnover_rate'] / 100 # 换手率 %
+                fund = ztobj['order_amount'] # 封单金额
+                zbc = 0 if ztobj['open_num'] is None else ztobj['open_num'] # 炸板次数
+                lbc = 1 if ztobj['high_days'] is None or ztobj['high_days'] == '首板' else int(re.findall(r'\d+', ztobj['high_days'])[-1])
+                days = 1 if ztobj['high_days'] is None or ztobj['high_days'] == '首板' else int(re.findall(r'\d+', ztobj['high_days'])[0])
+                zdf = ztobj['change_rate']
+                cpt = ztobj['reason_type'] # 涨停原因
+
+                rzdf = round(zdf)
+                mkt = 0
+                if rzdf == 30:
+                    mkt = 2
+                elif rzdf == 20:
+                    mkt = 1
+                elif rzdf == 5:
+                    mkt = 3
+                ztdata.append([code, rdate, fund, hsl, lbc, days, zbc, '', cpt, mkt])
+            # fields:
+            # 199112(change_rate涨跌幅),330329(high_days几天几板),9001(reason_type涨停原因),330325(limit_up_type涨停形态),
+            # 9002(open_num开板次数),133971(order_volume封单量),133970(order_amount封单额),1968584(turnover_rate换手率),
+            # 330323(first_limit_up_time首次涨停时间),330324(last_limit_up_time最后涨停时间),3475914(currency_value流通市值),
+            # 10(latest最新价),9003(limit_up_suc_rate近一年涨停封板率),9004(time_preview)
+
+            if jqkback['data']['page']['count'] == jqkback['data']['page']['page']:
+                break
+            self.page += 1
+
+        return ztdata
+
+class StockZtInfo(EmRequest):
+    '''涨停
+    ref: http://quote.eastmoney.com/ztb/detail#type=ztgc
+    '''
+    def __init__(self) -> None:
+        super().__init__()
+        self.urlroot = f'http://push2ex.eastmoney.com/getTopicZTPool?ut=7eea3edcaed734bea9cbfc24409ed989&sort=fbt%3Aasc&Pageindex=0&dpt=wz.ztzt&date='
+        self.date = None
+
+    @property
+    def db(self):
+        return MdlDayZtStocks
+
+    def getUrl(self):
+        if self.date is None:
+            self.date = TradingDate.max_trading_date()
+        return self.urlroot + self.date.replace('-', '')
+
+    def getNext(self, date=None):
+        self.date = date
+
+        self.headers['Referer'] = f'http://quote.eastmoney.com/ztb/detail'
+        self.headers['Host'] = 'push2ex.eastmoney.com'
+        emback = json.loads(self.getRequest(self.headers))
+        if emback is None or emback['data'] is None:
+            logger.info('StockZtInfo invalid response! %s', emback)
+            return []
+
+        qdate = f"{emback['data']['qdate']}"
+        if 'qdate' in emback['data'] and qdate != self.date.replace('-', ''):
+            self.date = qdate[0:4] + '-' + qdate[4:6] + '-' + qdate[6:8]
+            return []
+
+        ztdata = []
+        date = qdate[0:4] + '-' + qdate[4:6] + '-' + qdate[6:8]
+        for ztobj in emback['data']['pool']:
+            code = rtbase.get_fullcode(ztobj['c']) # code
+            hsl = ztobj['hs']/100 # 换手率 %
+            fund = ztobj['fund'] # 封单金额
+            zbc = ztobj['zbc'] # 炸板次数
+            lbc = ztobj['lbc']
+            zdf = ztobj['zdp']
+            mkt = 0
+            if code.startswith('bj'):
+                mkt = 2
+            elif round(zdf) == 5:
+                mkt = 3
+            elif round(zdf) == 20:
+                mkt = 1
+            zdf = zdf / 100.0
+            hybk = ztobj['hybk'] # 行业板块
+            days = ztobj['zttj']['days']
+            # other sections: c->code, n->name, m->market(0=SZ,1=SH), p->涨停价*1000, zdp->涨跌幅,
+            # amount->成交额, ltsz->流通市值, tshare->总市值, lbc->连板次数, fbt->首次封板时间, lbt->最后封板时间
+            # zttj->涨停统计 {days->天数, ct->涨停次数}
+            ztdata.append([code, date, fund, hsl, lbc, days, zbc, hybk, '', mkt])
+
+        return ztdata
+
+class StockZtDaily(StockBaseSelector):
+    def __init__(self):
+        super().__init__(1)
+
+    @property
+    def db(self):
+        return MdlDayZtStocks
+
+    @property
+    def ztinfo(self):
+        return StockZtInfo()
+
+    @property
+    def jqkinfo(self):
+        return StockZtInfo10jqka()
+
+    @async_lru()
+    async def st_stocks(self):
+        sts = await query_values(MdlStockBkMap, MdlStockBkMap.stock, MdlStockBkMap.bk == 'BK0511')
+        return [s for s, in sts]
+
+    async def is_st_stock(self, code):
+        sts = await self.st_stocks()
+        return code in sts
+
+    async def task_prepare(self, date: Optional[str] = None):
+        onlycalc = date is None
+        if date is None:
+            await super().task_prepare(date)
+        else:
+            date = TradingDate.next_trading_date(date)
+            stks = await query_values(MdlAllStock, [MdlAllStock.code], or_(MdlAllStock.typekind == 'ABStock', MdlAllStock.typekind == 'BJStock'))
+            self.wkstocks = [[c, date] for c, in stks]
+            self.wkselected = []
+
+        for i, w in enumerate(self.wkstocks):
+            sdate = await query_aggregate('max', self.db, 'time', MdlDayZtStocks.code == w[0], MdlDayZtStocks.lbc == 1)
+            if sdate is None or sdate == 0:
+                sdate = '0'
+            else:
+                sdate = TradingDate.prev_trading_date(sdate)
+            self.wkstocks[i].append(sdate)
+
+        while not onlycalc:
+            ztdata = self.ztinfo.getNext(date)
+            jqkztdata = self.jqkinfo.getNext(date)
+            for ztobj in jqkztdata:
+                zdata = next((t for t in ztdata if t[0] == ztobj[0] and t[1] == ztobj[1]), None)
+                if zdata:
+                    zdata[-2] = ztobj[-2]
+                else:
+                    ztdata.append(ztobj)
+            self.wkselected.extend(ztdata)
+            if date == TradingDate.max_trading_date():
+                break
+            date = TradingDate.next_trading_date(date)
+
+    async def get_embk(self, code):
+        bks = await query_values(MdlStockBkMap, 'bk', MdlStockBkMap.stock == code)
+        if bks is None or len(bks) == 0:
+            return ''
+        bk, = bks[0]
+        return await query_one_value(MdlStockBk, 'name', MdlStockBk.code == bk)
+
+    @async_lru()
+    async def get_bk(self, code):
+        bks = await query_values(self.db, 'bk', self.db.code == code)
+        if bks is None or len(bks) == 0:
+            return await self.get_embk(code)
+
+        for i in range(len(bks) - 1, 0, -1):
+            bk, = bks[i]
+            if bk != '':
+                return bk
+        return await self.get_embk(code)
+
+    @async_lru()
+    async def get_concept(self, code):
+        cpts = await query_values(self.db, 'cpt', self.db.code == code)
+        if cpts is None or len(cpts) == 0:
+            return ''
+        for i in range(len(cpts) - 1, 0, -1):
+            cpt, = cpts[i]
+            if cpt != '':
+                return cpt
+        return ''
+
+    async def merge_selected(self, sel):
+        osel = next((s for s in self.wkselected if s[0] == sel[0] and s[1] == sel[1]), None)
+        if not osel:
+            sel[7] = await self.get_bk(sel[0])
+            sel[8] = await self.get_concept(sel[0])
+            self.wkselected.append(sel)
+            return
+        if osel[7] == '':
+            osel[7] = await self.get_bk(sel[0])
+        if osel[8] == '':
+            osel[8] = await self.get_concept(sel[0])
+        if osel[4] != sel[4]:
+            osel[4] = sel[4]
+        if osel[5] != sel[5]:
+            osel[5] = sel[5]
+
+    async def task_processing(self, worker_id):
+        while len(self.wkstocks) > 0:
+            c,zdate,sdate = self.wkstocks.pop(0)
+            allkl = await self.get_kd_data(c, start=sdate)
+            if allkl is None or len(allkl) == 0:
+                continue
+
+            zdf = zdf_from_code(c)
+            if zdf == 10 and await self.is_st_stock(c):
+                zdf = 5
+            mkt = [10, 20, 30, 5].index(zdf)
+
+
+            i = 0
+            while i < len(allkl):
+                if allkl[i].time < zdate:
+                    i += 1
+                    continue
+                if i == 0 and allkl[i].close == allkl[i].high and allkl[i].change * 100 >= zdf - 0.1:
+                    await self.merge_selected([c, allkl[i].time, 0, 0, 1, 1, 0, "", "", mkt])
+                    i += 1
+                    continue
+
+                c0 = allkl[i-1].close
+                if allkl[i].close == allkl[i].high and allkl[i].close >= zt_priceby(c0, zdf=zdf):
+                    days = 1
+                    lbc = 1
+                    t = i
+                    j = i - 1
+                    while j >= 0:
+                        if j == 0:
+                            if allkl[j].change * 100 >= zdf - 0.1:
+                                lbc += 1
+                                days += t
+                            break
+                        c0 = allkl[j-1].close
+                        if allkl[j].close == allkl[j].high and allkl[j].close >= zt_priceby(c0, zdf=zdf):
+                            lbc += 1
+                            days += t - j
+                            t = j
+                            j -= 1
+                            continue
+                        if t - j >= 3:
+                            break
+                        j -= 1
+                    if lbc == 1:
+                        days = 1
+                    await self.merge_selected([c, allkl[i].time, 0, 0, lbc, days, 0, "", "", mkt])
+                i += 1
+
+
+
+class StockZtConcepts():
+    @property
+    def db(self):
+        return MdlDayZtConcepts
+
+    @property
+    def ztdb(self):
+        return MdlDayZtStocks
+
+    async def getNext(self):
+        date = await query_aggregate('max', self.db, 'time')
+        if date is None:
+            date = await query_aggregate('min', self.ztdb, 'time')
+        if date is None:
+            logger.info(f'{self.__class__.__name__} no data to updated!')
+            return
+
+        ztconceptsdata = []
+        while date <= TradingDate.max_trading_date():
+            pool = await query_values(self.ztdb, [MdlDayZtStocks.code, MdlDayZtStocks.bk, MdlDayZtStocks.cpt], self.ztdb.time == date)
+            if not pool:
+                if date == TradingDate.max_trading_date():
+                    logger.info(f'{self.__class__.__name__} no data for {date}')
+                    return
+                date = TradingDate.next_trading_date(date)
+                continue
+
+            cdict = {}
+            for c, bk, con in pool:
+                if con is None:
+                    con = ''
+                if con == '' and bk == '':
+                    raise Exception(f'no bk or con for {c} on {date}, please correct the data!')
+                cons = []
+                if con == '':
+                    cons.append(bk)
+                elif '+' in con:
+                    cons = con.split('+')
+                else:
+                    cons.append(con)
+                for k in cons:
+                    if k not in cdict:
+                        cdict[k] = 1
+                    else:
+                        cdict[k] += 1
+            for k,v in cdict.items():
+                ztconceptsdata.append([date, k, v])
+
+            ndate = TradingDate.next_trading_date(date)
+            if ndate == date:
+                break
+            date = ndate
+
+        await insert_many(self.db, array_to_dict_list(self.db, ztconceptsdata), ['time', 'cpt'])
+
+
+class StockDtInfo(EmRequest):
+    '''跌停
+    ref: http://quote.eastmoney.com/ztb/detail#type=ztgc
+    '''
+    def __init__(self):
+        super().__init__()
+        self.date = None
+        self.urlroot = f'http://push2ex.eastmoney.com/getTopicDTPool?ut=7eea3edcaed734bea9cbfc24409ed989&dpt=wz.ztzt&Pageindex=0&sort=fund%3Aasc&date='
+        self.dtdata = []
+
+    @property
+    def db(self):
+        return MdlDayDtStocks
+
+    def getUrl(self):
+        return f'{self.urlroot}{self.date.replace("-", "")}'
+
+    async def getNext(self):
+        if self.date is None:
+            mxdate = await query_aggregate('max', self.db, 'time')
+            if mxdate == TradingDate.max_trading_date():
+                logger.info(f'{self.__class__.__name__} already updated to {mxdate}')
+                return
+            self.date = TradingDate.next_trading_date(mxdate) if mxdate is not None else TradingDate.max_trading_date()
+
+        self.headers['Referer'] = f'http://quote.eastmoney.com/ztb/detail'
+        self.headers['Host'] = 'push2ex.eastmoney.com'
+        self.dtdata = []
+        while True:
+            emback = json.loads(self.getRequest(self.headers))
+            if emback is None or emback['data'] is None:
+                logger.info('StockDtInfo invalid response! %s', emback)
+                if self.date < TradingDate.max_trading_date():
+                    self.date = TradingDate.next_trading_date(self.date)
+                    continue
+                break
+
+            qdate = f"{emback['data']['qdate']}"
+            if 'qdate' in emback['data'] and qdate != self.date.replace('-', ''):
+                self.date = qdate[0:4] + '-' + qdate[4:6] + '-' + qdate[6:8]
+                continue
+
+            date = qdate[0:4] + '-' + qdate[4:6] + '-' + qdate[6:8]
+            for dtobj in emback['data']['pool']:
+                code = rtbase.get_fullcode(dtobj['c']) # code
+                hsl = dtobj['hs'] / 100 # 换手率 %
+                fund = dtobj['fund'] # 封单金额
+                fba = dtobj['fba'] # 板上成交额
+                lbc = dtobj['days'] # 连板次数
+                zbc = dtobj['oc'] # 开板次数
+                hybk = dtobj['hybk'] # 行业板块
+                mkt = 0
+                if code.startswith('bj'):
+                    mkt = 2
+                elif round(abs(dtobj['zdp'])) == 20:
+                    mkt = 1
+                elif round(abs(dtobj['zdp'])) == 5:
+                    mkt = 3
+                self.dtdata.append([code, date, fund, fba, hsl, lbc, zbc, hybk, mkt])
+
+            self.date = TradingDate.next_trading_date(self.date)
+            if self.date == TradingDate.max_trading_date():
+                break
+
+        if len(self.dtdata) > 0:
+            await insert_many(self.db, array_to_dict_list(self.db, self.dtdata), ['code', 'time'])
+

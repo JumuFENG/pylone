@@ -8,7 +8,9 @@ from . import classproperty
 class Network:
     @classproperty
     def session(cls) -> requests.Session:
-        return requests.Session()
+        session = requests.Session()
+        session.headers.update(cls.headers)
+        return session
 
     @classproperty
     def headers(cls) -> dict:
