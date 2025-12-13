@@ -6,7 +6,7 @@ from app import PostParams, pparam_doc
 from app.hu import img_to_text
 from app.hu.network import Network
 from app.admin.system_settings import SystemSettings
-from .stock.history import Khistory as khis
+from .stock.history import Khistory as khis, StockZtDaily, StockDtInfo
 from .stock.date import TradingDate
 from .stock.manager import AllStocks, AllBlocks
 from .stock.quotes import Quotes as qot
@@ -61,34 +61,22 @@ async def stock_hist(
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-
 @router.get("/stockzthist")
 async def stock_zthist(
     date: str = Query(...),
     concept: str = Query(...),
-    daily: bool = Query(...),
 ):
-    # TODO: get stock zt history data
-    # if daily:
-    #     return json.dumps(szi.dumpDailyZt())
-    # if concept is None:
-    #     zt = szi.dumpDataByDate(date)
-    #     return json.dumps(zt)
-    # else:
-    #     szi = StockZtDaily()
-    #     zt = szi.dumpZtDataByConcept(date, concept)
-    #     return json.dumps(zt)
-    return []
+    szi = StockZtDaily()
+    if concept is None:
+        return await szi.dump_main_stocks_zt0(date)
+    return await szi.dump_by_concept(date, concept)
 
 @router.get("/stockdthist")
 async def stock_dthist(
     date: str = Query(...),
 ):
-    # TODO: get stock dt history data
-    # sdi = StockDtInfo()
-    # dt = sdi.dumpDataByDate(date)
-    # return json.dumps(dt)
-    return []
+    sdi = StockDtInfo()
+    return await sdi.dumpDataByDate(date)
 
 @router.get("/allstockinfo")
 async def all_stock_info():

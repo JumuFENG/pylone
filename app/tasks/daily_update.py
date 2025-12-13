@@ -15,7 +15,7 @@ sys.path.insert(0, os.path.realpath(os.path.dirname(__file__) + '/../..'))
 from app.lofig import Config, logging
 from app.stock.date import TradingDate
 from app.stock.manager import AllStocks, AllBlocks
-from app.stock.history import StockShareBonus, StockChanges, StockBkMap, StockZtDaily, StockZtConcepts
+from app.stock.history import StockShareBonus, StockChanges, StockBkMap, StockZtDaily, StockZtConcepts, StockDtInfo
 logger = logging.getLogger(f'{Config.app_name}.{__package__}')
 
 
@@ -138,9 +138,9 @@ class DailyUpdater():
         ztcpt = StockZtConcepts()
         await ztcpt.getNext()
 
-        # logger.info('update dt info')
-        # dtinfo = StockDtInfo()
-        # dtinfo.getNext()
+        logger.info('update dt info')
+        dtinfo = StockDtInfo()
+        dtinfo.getNext()
 
     @classmethod
     def fetch_dfsorg_stocks(cls):

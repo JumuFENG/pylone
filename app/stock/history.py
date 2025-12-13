@@ -1405,6 +1405,34 @@ class StockZtDaily(StockBaseSelector):
 
         return [[c, d, days, lbc] for c, d, days, lbc in zts if d == ztdate[c]]
 
+    async def dump_main_stocks_zt0(self, date=None):
+        if date is None:
+            date = await query_aggregate('max', self.db, 'time')
+
+        await query_values(self.db, ['code', 'bk', 'cpt'], self.db.time == date, self.db.lbc == 1, self.db.mkt == 0)
+
+    async def dump_by_concept(self, date, concept):
+        if date is None:
+            return []
+
+        zts = await query_values(self.db, ['code', 'lbc', 'bk', 'cpt'], self.db.time == date)
+
+        def unify_concepts(zts):
+            return [[c, n, bk if con == '' else con] for c, n, bk, con in zts]
+
+        if concept is not None:
+            ztcpt = []
+            for c, n, bk, con in zts:
+                cons = [bk]
+                if '+' in con:
+                    cons = con.split('+')
+                elif con != '':
+                    cons = [con]
+                if concept in cons:
+                    ztcpt.append([c, n, bk, con])
+            return unify_concepts(ztcpt)
+        return unify_concepts(zts)
+
 
 class StockZtConcepts():
     @property
@@ -1528,3 +1556,21 @@ class StockDtInfo(EmRequest):
 
         if len(self.dtdata) > 0:
             await insert_many(self.db, array_to_dict_list(self.db, self.dtdata), ['code', 'time'])
+
+    async def dumpDataByDate(self, date = None):
+        if date is None:
+            date = await query_aggregate('max', self.db, 'time')
+
+        if date is None:
+            return None
+
+        if date > TradingDate.max_traded_date():
+            date = TradingDate.max_traded_date()
+
+        if not TradingDate.is_trading_date(date):
+            date = TradingDate.next_trading_date(date)
+
+        pool = await query_values(self.db, ['code', 'lbc', 'bk'], self.db.time == date)
+        if pool is not None and len(pool) > 0:
+            return {'date': date, 'pool': pool}
+        return {'date': date,'pool':[]}
