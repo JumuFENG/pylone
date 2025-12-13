@@ -10,7 +10,6 @@ sys.path.insert(0, os.path.realpath(os.path.dirname(__file__) + '/../..'))
 # from phon.data.user import User
 # from utils import Utils, datetime, shared_cloud_foler
 from datetime import datetime
-# from tasks import StockMarket_Stats_Task
 from app.stock.date import TradingDate
 from app.stock.manager import AllStocks, AllBlocks
 from app.admin.system_settings import SystemSettings
@@ -47,7 +46,7 @@ async def save_earning_task():
 
 async def update_bkchanges_history():
     try:
-        await AllBlocks.updateBkChangedIn5Days()
+        await AllBlocks.update_bk_changed_in5days()
     except Exception as e:
         logger.error(f'Error updating bk changes history: {e}')
         logger.error(format_exc())
@@ -68,12 +67,6 @@ async def update_daily_trade_closed_history():
     except Exception as e:
         logger.error(f'Error updating daily history data: {e}')
         logger.error(format_exc())
-
-
-
-# class SmStatsTask1501(TimerTask):
-#     def __init__(self) -> None:
-#         super().__init__('15:01:10', StockMarket_Stats_Task.execute_simple_task)
 
 
 if __name__ == '__main__':

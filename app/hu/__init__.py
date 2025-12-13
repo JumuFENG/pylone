@@ -40,6 +40,9 @@ def delay_seconds(daytime:str)->float:
     target_time = dnow.replace(hour=hr, minute=minutes, second=secs)
     return (target_time - dnow).total_seconds()
 
+def to_cls_secucode(code):
+    return code[2:] + '.BJ' if code.startswith('bj') else code.lower()
+
 class FixedPointConverter:
     def __init__(self, precision=4):
         self.precision = precision

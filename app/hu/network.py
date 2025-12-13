@@ -23,6 +23,10 @@ class Network:
         }
 
     @classmethod
+    def get_headers(cls, headers={}):
+        return {**cls.headers, **headers}
+
+    @classmethod
     @retry(
         wait=wait_exponential(multiplier=1, min=1, max=5),
         stop=stop_after_attempt(3),

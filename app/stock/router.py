@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Query, HTTPException
 from typing import Optional
 from app import PostParams, pparam_doc
-from .manager import AllStocks, AllBlocks
+from .manager import AllStocks, AllBlocks, StockMarketStats
 from .schemas import PmStock
 
 
@@ -17,7 +17,9 @@ async def stock_get(act: str = Query(..., embed=True)):
         bks = await AllBlocks.read_ignored()
         return [b for b, in bks]
     if act == "rtbkchanges":
-        return await AllBlocks.updateBkChanged()
+        return await AllBlocks.update_bk_changed()
+    if act == "sm_stats":
+        return await StockMarketStats.latest_stats()
     return {"message": f"Hello {act}"}
 
 @router.post("", openapi_extra=pparam_doc([("act", "string", "act", True)]))

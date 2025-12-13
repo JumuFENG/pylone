@@ -10,7 +10,7 @@ from app.hu import delay_seconds
 from app.admin.system_settings import SystemSettings
 from app.stock.models import MdlSysSettings
 from app.stock.date import TradingDate
-from app.stock.manager import AllBlocks
+from app.stock.manager import AllBlocks, StockMarketStats
 from app.db import query_one_value, upsert_one
 from .trade_opening import (
     stock_market_opening_task,
@@ -162,6 +162,16 @@ class BkChangesTask(TimerTask):
         await AllBlocks.clsbkchanges.saveChanges(clsbkchanges)
 
 
+class StockMarketStatsTask(TimerTask):
+    '''股市概况, 早盘竞价结束自动执行一次, 早上9:40自动执行一次, 收盘执行一次'''
+    # ['9:25:05', '9:40', '15:01']
+    def __init__(self, btime: str, etime: str):
+        super().__init__(0, btime, etime)
+
+    async def execute_task(self):
+        await StockMarketStats.execute()
+
+
 class Timers:
     timers = []
     last_tid = 0
@@ -260,6 +270,9 @@ class Timers:
         try:
             if SystemSettings.settings.get('bkchanges_update_realtime') == '1':
                 timer = BkChangesTask()
+                timer.start()
+            for b,e in [('9:25:05', '9:30'), ('9:40', '9:50'), ('15:01', '15:15')]:
+                timer = StockMarketStatsTask(b, e)
                 timer.start()
         except Exception as e:
             logger.error(f'Error running trading tasks: {e}')

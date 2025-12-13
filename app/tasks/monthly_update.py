@@ -20,8 +20,7 @@ class MonthlyUpdater():
     """for monthly update"""
     @staticmethod
     async def update_all():
-        print('')
-        print('Start monthly update.', datetime.now())
+        logger.info('Start monthly update. %s', datetime.now())
 
         try:
             await AllStocks.update_kline_data('m', sectype='Index')

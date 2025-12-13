@@ -770,6 +770,16 @@ class BkChanges(EmRequest):
             return
         await upsert_many(self.model_class, array_to_dict_list(self.model_class, changes), ['code', 'time'])
 
+    async def dumpDataByDate(self, date=None):
+        if date is None:
+            date = await query_aggregate('max', self.model_class, 'time')
+        if date is None:
+            logger.info(f'{self.__class__.__name__} no data to updated!')
+            return
+
+        pool = await query_values(self.model_class, self.model_class.code, self.model_class.time == date)
+        return [c for c, in pool]
+
     async def dumpTopBks(self, date, min_change=2, min_amount=0, min_ztcnt=5):
         """提取符合条件的板块（参数化阈值）"""
         ndate = TradingDate.next_trading_date(date)
@@ -788,6 +798,73 @@ class BkChanges(EmRequest):
             if p >= min_change and a > min_amount and zcnt >= min_ztcnt:
                 bks.append(c)
         return bks
+
+    async def topbks_to_date(self):
+        mdate = TradingDate.max_traded_date()
+        sdate = mdate
+        ibks = []
+        bkhist = {}
+        for i in range(0, 10):
+            sdate = TradingDate.prev_trading_date(sdate)
+            ibks += await self.dumpTopBks(sdate)
+
+        chgs = await query_values(self.model_class, ['code', 'time', 'change', 'amount', 'ztcnt', 'dtcnt'], self.model_class.time >= f"{sdate} 14:50")
+        for c, d, ch, amt, zcnt, dcnt in chgs:
+            dt, tm = d.split()
+            if tm < '14:50':
+                continue
+            if c not in ibks:
+                continue
+            if c not in bkhist:
+                bkhist[c] = {}
+            bkhist[c][dt] = [c, dt, ch, amt, zcnt, dcnt]
+
+        faded = []
+        for c, hist in bkhist.items():
+            if max(hist.keys()) < mdate:
+                faded.append(c)
+        for c in faded:
+            bkhist.pop(c)
+
+        bkhistarr = {}
+        for c, hist in bkhist.items():
+            if c not in bkhistarr:
+                bkhistarr[c] = []
+            for d, h in hist.items():
+                bkhistarr[c].append(h)
+            shist = sorted(bkhistarr[c], key=lambda x: x[1], reverse=True)
+            bkhistarr[c] = [shist[0]]
+            for i in range(1, len(shist)):
+                if shist[i][1] != TradingDate.prev_trading_date(bkhistarr[c][0][1]):
+                    break
+                bkhistarr[c].insert(0, shist[i])
+        bkhist = bkhistarr
+
+        bkkickdetail = {}
+        topbktetail = {}
+        for c, hist in bkhist.items():
+            mxch = hist[-1][2]
+            kickid = len(hist) - 1
+            for i in range(len(hist) - 1, -1, -1):
+                if hist[i][2] > mxch:
+                    mxch = hist[i][2]
+                    kickid = i
+            for i in range(kickid, -1, -1):
+                if hist[i][2] < 0.3 * mxch:
+                    break
+                kickid = i
+            tch = 0
+            for i in range(kickid, len(hist)):
+                tch += hist[i][2]
+            tch = round(tch, 2)
+            name = query_one_value(MdlStockBkMap, 'name', MdlStockBkMap.stock == c)
+            kick_days = TradingDate.calc_trading_days(hist[kickid][1], min(hist[-1][1], TradingDate.max_trading_date()))
+            if len(topbktetail.keys()) == 0 or tch > list(topbktetail.values())[0]['change_to_date']:
+                topbktetail[c] = {'code':c, 'name':name, 'kickdate': hist[kickid][1], 'change_to_date': tch, 'kick_days': kick_days}
+            if tch / kick_days < 0.8:
+                continue
+            bkkickdetail[c] = {'code':c, 'name':name, 'kickdate': hist[kickid][1], 'change_to_date': tch, 'kick_days': kick_days}
+        return bkkickdetail if len(bkkickdetail.keys()) > 0 else topbktetail
 
 
 class StockBkChanges(BkChanges):
@@ -1317,6 +1394,16 @@ class StockZtDaily(StockBaseSelector):
                     await self.merge_selected([c, allkl[i].time, 0, 0, lbc, days, 0, "", "", mkt])
                 i += 1
 
+    async def get_hot_stocks(self, date):
+        zts = await query_values(self.db, ['code', 'time', 'days', 'lbc'], self.db.time == date)
+        ztdate = {}
+        for c, d, days, lbc in zts:
+            if c not in ztdate:
+                ztdate[c] = d
+            elif d > ztdate[c]:
+                ztdate[c] = d
+
+        return [[c, d, days, lbc] for c, d, days, lbc in zts if d == ztdate[c]]
 
 
 class StockZtConcepts():
@@ -1441,4 +1528,3 @@ class StockDtInfo(EmRequest):
 
         if len(self.dtdata) > 0:
             await insert_many(self.db, array_to_dict_list(self.db, self.dtdata), ['code', 'time'])
-

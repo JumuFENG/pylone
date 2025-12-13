@@ -1,15 +1,19 @@
 import sys
+import json
+import gzip
 import numpy as np
 from typing import List, Tuple
 from datetime import datetime
 import stockrt as srt
 from stockrt.sources.eastmoney import Em
-from app.hu import classproperty
+from app.hu import classproperty, to_cls_secucode
 from app.lofig import logger
 from app.db import upsert_one, upsert_many, query_one_value, query_aggregate, query_values, delete_records
-from .models import MdlAllStock, MdlStockBk
+from .models import MdlAllStock, MdlStockBk, MdlSMStats
 from .schemas import PmStock
-from .history import (Khistory as khis, FflowHistory as fhis, StockBkMap, StockBkChanges, StockClsBkChanges)
+from .history import (
+    Network, rtbase, array_to_dict_list,
+    Khistory as khis, FflowHistory as fhis, StockBkMap, StockBkChanges, StockClsBkChanges, StockZtDaily)
 from .date import TradingDate
 
 
@@ -297,12 +301,187 @@ class AllBlocks:
         await upsert_one(cls.db, {'code': code, 'chgignore': ignore}, ['code'])
 
     @classmethod
-    async def updateBkChanged(cls):
+    async def update_bk_changed(cls):
         bk_chgs = await cls.bkchanges.getLatestChanges()
         bk_chgs += await cls.clsbkchanges.getLatestChanges()
         return bk_chgs
 
     @classmethod
-    async def updateBkChangedIn5Days(cls):
+    async def update_bk_changed_in5days(cls):
         await cls.bkchanges.updateBkChangedIn5Days()
         await cls.clsbkchanges.updateBkChangedIn5Days()
+
+    @classmethod
+    async def get_topbks(cls):
+        embkkicks = await cls.bkchanges.topbks_to_date()
+        clsbkkicks = await cls.clsbkchanges.topbks_to_date()
+        return {**embkkicks, **clsbkkicks}
+
+
+class StockMarketStats():
+    topbks = None
+    hotstocks = None
+    lateststats = None
+
+    @classproperty
+    def db(cls):
+        return MdlSMStats
+
+    @classmethod
+    async def get_topbks(self):
+        self.topbks = await AllBlocks.get_topbks()
+        self.bkstocklist = {}
+        for bk in self.topbks:
+            self.bkstocklist[bk] = [to_cls_secucode(c) for c in StockBkMap.bk_stocks(bk)]
+
+        kickdate = TradingDate.prev_trading_date(TradingDate.max_traded_date(), 3) if len(self.topbks.values()) == 0 else min([bk['kickdate'] for bk in self.topbks.values()])
+        szt = StockZtDaily()
+        ztstks = await szt.get_hot_stocks(kickdate)
+        mdate = TradingDate.max_trading_date()
+        self.hotstocks = {to_cls_secucode(c): {'code': to_cls_secucode(c), 'date': d, 'days': days, 'lbc': lbc, 'ndays': TradingDate.calc_trading_days(d, mdate) - 1} for c,d,days,lbc in ztstks}
+
+    @classmethod
+    def zt_lbc_sort_key(self, secu):
+        code = secu['secu_code']
+        if code not in self.hotstocks:
+            return -1, -1
+        days = self.hotstocks[code]['days'] + self.hotstocks[code]['ndays']
+        if days == 0:
+            return -1, self.hotstocks[code]['lbc']
+        return days, self.hotstocks[code]['lbc'] / days
+
+    @classmethod
+    def connect_bk_stock(self, stats):
+        zt_stocks = [z['secu_code'] for z in stats['stocks']['zt_yzb'] + stats['stocks']['zt']]
+        for bk in self.topbks:
+            self.topbks[bk]['zt_stocks'] = [s for s in self.bkstocklist[bk] if s in zt_stocks]
+        stats['plates'] = sorted(self.topbks.values(), key=lambda x: len(x['zt_stocks']), reverse=True)
+
+        stocks = {}
+        for k in ['zt_yzb', 'zt', 'up', 'down', 'dt']:
+            stocks[k] = []
+            pstocks = [[] for _ in range(len(stats['plates']))]
+            for zs in stats['stocks'][k]:
+                inplates = False
+                for i in range(0, len(stats['plates'])):
+                    if zs['secu_code'] in self.bkstocklist[stats['plates'][i]['code']]:
+                        pstocks[i].append(zs)
+                        inplates = True
+                        break
+                if not inplates:
+                    if len(pstocks) == 0:
+                        pstocks.append([])
+                    pstocks[-1].append(zs)
+
+            for i in range(len(pstocks)):
+                if len(pstocks[i]) < 2:
+                    continue
+                pstocks[i] = sorted(pstocks[i], key=self.zt_lbc_sort_key, reverse=True)
+            stocks[k] = []
+            for zs in pstocks:
+                stocks[k] += zs
+        stats['stocks'] = stocks
+
+        estocks = []
+        for k in ['zt_yzb', 'zt', 'up', 'down', 'dt']:
+            for zs in stats['stocks'][k]:
+                estocks.append(zs['secu_code'])
+        stockextras = {}
+        for s in estocks:
+            if s in self.hotstocks:
+                stockextras[s] = self.hotstocks[s]
+            plist = []
+            for p in stats['plates']:
+                if s in self.bkstocklist[p['code']]:
+                    plist.append(p['code'])
+            if len(plist) > 0:
+                if s not in stockextras:
+                    stockextras[s] = {}
+                stockextras[s]['plates'] = plist
+        stats['stockextras'] = stockextras
+        return stats
+
+    @classmethod
+    async def execute(self):
+        try:
+            if self.topbks is None or self.hotstocks is None:
+                await self.get_topbks()
+            zdfranks = []
+            fs = 'm:0+t:6+f:!2,m:0+t:80+f:!2,m:1+t:2+f:!2,m:1+t:23+f:!2,m:0+t:81+s:262144+f:!2'
+            zdfranks.extend(Em.qt_clist(fs, fields='f2,f3,f12,f13,f18', fid='f3', po=1, qtcb=lambda data: any(d['f3'] < 8 for d in data)))
+            zdfranks.extend(Em.qt_clist(fs, fields='f2,f3,f12,f13,f18', fid='f3', po=0, qtcb=lambda data: any(d['f3'] > -8 for d in data)))
+            up_down_stocks = []
+            for rkobj in zdfranks:
+                c = rkobj['f2']   # 最新价
+                zd = rkobj['f3']  # 涨跌幅
+                if c == '-' or zd == '-':
+                    continue
+                cd = rkobj['f12'] # 代码
+                if zd >= 8 or zd <= -8:
+                    code = rtbase.get_fullcode(cd)
+                    up_down_stocks.append(code)
+
+            sm_statistics = {'time': datetime.now().strftime('%Y-%m-%d %H:%M'), 'stocks': {'zt_yzb':[], 'zt':[], 'dt':[], 'up':[], 'down':[]}}
+            fields = 'open_px,av_px,high_px,low_px,change,change_px,down_price,cmc,business_amount,business_balance,secu_name,secu_code,trade_status,secu_type,preclose_px,up_price,last_px'
+            for i in range(0,len(up_down_stocks),200):
+                ccodes = ','.join([to_cls_secucode(c) for c in up_down_stocks[i: i+200]])
+                bUrl = f'https://x-quote.cls.cn/quote/stocks/basic?app=CailianpressWeb&fields={fields}&os=web&secu_codes={ccodes}&sv=8.4.6'
+                sbasics = json.loads(Network.fetch_url(bUrl, Network.get_headers({'Host': 'x-quote.cls.cn'})))
+                if 'data' in sbasics:
+                    for secu in sbasics['data']:
+                        sbasic = sbasics['data'][secu]
+                        o,h,l,c = sbasic['open_px'], sbasic['high_px'], sbasic['low_px'], sbasic['last_px']
+                        u,d,lc = sbasic['up_price'], sbasic['down_price'], sbasic['preclose_px']
+                        if c == u:
+                            if h == l:
+                                # 一字
+                                sm_statistics['stocks']['zt_yzb'].append(sbasic)
+                            else:
+                                # 涨停
+                                sm_statistics['stocks']['zt'].append(sbasic)
+                        elif c == d:
+                            sm_statistics['stocks']['dt'].append(sbasic)
+                            # 跌停
+                        elif sbasic['change'] >= 0.08:
+                            sm_statistics['stocks']['up'].append(sbasic)
+                            # 大涨
+                        elif sbasic['change'] <= -0.08:
+                            # 大跌
+                            sm_statistics['stocks']['down'].append(sbasic)
+
+            sm_statistics = self.connect_bk_stock(sm_statistics)
+            dsm, tsm = sm_statistics['time'].split(' ')
+            await self.save_stats([[dsm, tsm, sm_statistics]])
+            if self.lateststats is None:
+                self.lateststats = [sm_statistics]
+            else:
+                self.lateststats.append(sm_statistics)
+        except Exception as e:
+            logger.info(e)
+
+    @classmethod
+    async def save_stats(self, stats):
+        values = []
+        for d,t,s in stats:
+            sstr = json.dumps(s)
+            cmpsstr = gzip.compress(sstr.encode('utf-8'))
+            values.append([d, t, cmpsstr])
+
+        if len(values) > 0:
+            await upsert_many(self.db, array_to_dict_list(self.db, values), ['date', 'time'])
+
+    @classmethod
+    async def read_stats(self, date=None):
+        if date is None:
+            date = await query_aggregate('max', self.db, 'date')
+        dstats = await query_values(self.db, 'stats', self.db.date == date)
+        stats = []
+        for s, in dstats:
+            stats.append(json.loads(gzip.decompress(s).decode('utf-8')))
+        return stats
+
+    @classmethod
+    async def latest_stats(self):
+        if self.lateststats is None:
+            self.lateststats = await self.read_stats()
+        return self.lateststats

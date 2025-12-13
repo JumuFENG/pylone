@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, Integer, SmallInteger, Float, PrimaryKeyConstraint
+from sqlalchemy import Column, String, Integer, SmallInteger, Float, LargeBinary, PrimaryKeyConstraint
 from app.db import Base, engine
 
 
@@ -185,6 +185,17 @@ class MdlDayZtConcepts(Base):
         PrimaryKeyConstraint('time', 'cpt', name='pk_day_zt_concepts'),
     )
 
+
+class MdlSMStats(Base):
+    __tablename__ = "stock_market_stats"
+
+    date = Column(String(10), nullable=False)
+    time = Column(String(10), nullable=False)
+    stats = Column(LargeBinary, nullable=False)
+
+    __table_args__ = (
+        PrimaryKeyConstraint('date', 'time', name='pk_stock_market_stats'),
+    )
 
 class UserStocks(Base):
     __tablename__ = "user_stocks"
