@@ -120,6 +120,9 @@ async def insert_many(model, data_list, unique_fields=[]):
     data_list: 字典列表，包含字段和值
     unique_fields: 唯一字段列表，用于判断记录是否存在
     """
+    if not data_list:
+        return
+
     async with async_session_maker() as session:
         if not unique_fields:
             to_add = [model(**data) for data in data_list]

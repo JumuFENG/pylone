@@ -20,6 +20,8 @@ async def stock_get(act: str = Query(..., embed=True)):
         return await AllBlocks.update_bk_changed()
     if act == "sm_stats":
         return await StockMarketStats.latest_stats()
+    if act == "f4lost":
+        return await AllStocks.get_purelost4up()
     return {"message": f"Hello {act}"}
 
 @router.post("", openapi_extra=pparam_doc([("act", "string", "act", True)]))

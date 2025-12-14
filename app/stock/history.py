@@ -20,7 +20,7 @@ from . import dynamic_cache, async_lru, zt_priceby, zdf_from_code
 from .h5 import (KLineStorage as kls, FflowStorage as ffs)
 from .date import TradingDate
 from .models import (
-    MdlStockShare, MdlAllStock, MdlStockBk, MdlStockBkMap, MdlStockChanges, MdlStockBkChanges, MdlStockBkClsChanges,
+    MdlAllStock, MdlStockList, MdlStockShare,MdlStockBk, MdlStockBkMap, MdlStockChanges, MdlStockBkChanges, MdlStockBkClsChanges,
     MdlDayZtStocks, MdlDayDtStocks, MdlDayZtConcepts)
 from .schemas import KNode
 
@@ -330,6 +330,46 @@ class Khistory:
                 kldata = append_fields(kldata, 'amplitude', amplitude)
 
         kls.save_dataset(code, kldata, klt)
+
+
+class StockList():
+    @classproperty
+    def db(cls):
+        return MdlStockList
+
+    @classmethod
+    async def get_stocks(cls, list_key):
+        stocks = await query_values(cls.db, ['code'], cls.db.lkey == list_key)
+        return [c for c, in stocks]
+
+    @classmethod
+    async def save_stocks(cls, list_key, stocks):
+        async def quick_update():
+            await delete_records(cls.db, cls.db.lkey == list_key)
+            await insert_many(cls.db, [{'lkey': list_key, 'code': c} for c in stocks])
+
+        ostocks = await query_values(cls.db, ['code'], cls.db.lkey == list_key)
+        if len(ostocks) == 0:
+            await insert_many(cls.db, [{'lkey': list_key, 'code': c} for c in stocks])
+            return
+        ostocks = {c for c, in ostocks}
+        exists = list(ostocks - set(stocks))
+        news = list(set(stocks) - ostocks)
+        if len(exists) == 0:
+            await insert_many(cls.db, [{'lkey': list_key, 'code': c} for c in news])
+            return
+        if len(news) == 0:
+            await delete_records(cls.db, cls.db.lkey == list_key, cls.db.code.in_(exists))
+            return
+
+        if len(ostocks) < 200 or (len(ostocks) - len(exists)) / len(ostocks) > 0.3:
+            await quick_update()
+            return
+
+        if len(exists) > 0:
+            await delete_records(cls.db, cls.db.code.in_(exists), cls.db.lkey == list_key)
+        if len(news) > 0:
+            await insert_many(cls.db, [{'lkey': list_key, 'code': c} for c in news])
 
 
 class StockShareBonus(EmDataCenterRequest):

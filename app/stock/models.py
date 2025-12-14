@@ -11,6 +11,16 @@ class MdlAllStock(Base):
     setup_date = Column(String(20), nullable=True)
     quit_date = Column(String(20), nullable=True)
 
+class MdlStockList(Base):
+    __tablename__ = "stock_lists"
+
+    lkey = Column(String(20), nullable=False)
+    code = Column(String(20), nullable=False)
+
+    __table_args__ = (
+        PrimaryKeyConstraint('lkey', 'code', name='pk_stock_lists'),
+    )
+
 class MdlStockShare(Base):
     __tablename__ = "stock_bonus_shares"
 

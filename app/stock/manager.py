@@ -6,14 +6,16 @@ from typing import List, Tuple
 from datetime import datetime
 import stockrt as srt
 from stockrt.sources.eastmoney import Em
+from emxg import search_emxg
 from app.hu import classproperty, to_cls_secucode
 from app.lofig import logger
 from app.db import upsert_one, upsert_many, query_one_value, query_aggregate, query_values, delete_records
 from .models import MdlAllStock, MdlStockBk, MdlSMStats
 from .schemas import PmStock
 from .history import (
-    Network, rtbase, array_to_dict_list,
-    Khistory as khis, FflowHistory as fhis, StockBkMap, StockBkChanges, StockClsBkChanges, StockZtDaily)
+    Network, array_to_dict_list,
+    Khistory as khis, FflowHistory as fhis, StockBkMap, StockBkChanges, StockClsBkChanges, StockZtDaily,
+    StockList)
 from .date import TradingDate
 
 
@@ -252,6 +254,19 @@ class AllStocks:
         funds.extend(get_stocks(['MK0404', 'MK0405', 'MK0406', 'MK0407'], 'LOF'))
         await upsert_many(cls.db, funds, ['code'])
 
+    @classmethod
+    async def update_purelost4up(cls):
+        '''
+        连续4个季度亏损大于1000万元
+        '''
+
+        pdata = search_emxg('连续4个季度亏损大于1000万元')
+        await StockList.save_stocks('purelost4up', [srt.get_fullcode(code[:6]) for code in pdata['代码']])
+
+    @classmethod
+    async def get_purelost4up(cls):
+        return await StockList.get_stocks('purelost4up')
+
 
 class AllBlocks:
     @classproperty
@@ -418,7 +433,7 @@ class StockMarketStats():
                     continue
                 cd = rkobj['f12'] # 代码
                 if zd >= 8 or zd <= -8:
-                    code = rtbase.get_fullcode(cd)
+                    code = srt.get_fullcode(cd)
                     up_down_stocks.append(code)
 
             sm_statistics = {'time': datetime.now().strftime('%Y-%m-%d %H:%M'), 'stocks': {'zt_yzb':[], 'zt':[], 'dt':[], 'up':[], 'down':[]}}
