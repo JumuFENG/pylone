@@ -15,7 +15,7 @@ sys.path.insert(0, os.path.realpath(os.path.dirname(__file__) + '/../..'))
 from app.lofig import Config, logging
 from app.stock.date import TradingDate
 from app.stock.manager import AllStocks, AllBlocks
-from app.stock.history import StockShareBonus, StockChanges, StockBkMap, StockZtDaily, StockZtConcepts, StockDtInfo
+from app.stock.history import StockShareBonus, StockChanges, StockBkMap, StockZtDaily, StockZtConcepts, StockDtInfo, StockDtMap
 logger = logging.getLogger(f'{Config.app_name}.{__package__}')
 
 
@@ -155,8 +155,8 @@ class DailyUpdater():
     @classmethod
     def update_selectors(cls):
         logger.info('update dtmap info')
-        # sdm = StockDtMap()
-        # sdm.updateDtMap()
+        sdm = StockDtMap()
+        sdm.update_pickups()
 
         # logger.info('update dt3')
         # dts = StockDt3Selector()

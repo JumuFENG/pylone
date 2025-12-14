@@ -2,6 +2,7 @@ from fastapi import APIRouter, Query, HTTPException
 from typing import Optional
 from app import PostParams, pparam_doc
 from .manager import AllStocks, AllBlocks, StockMarketStats
+from .history import StockDtMap
 from .schemas import PmStock
 
 
@@ -12,7 +13,10 @@ router = APIRouter(
 )
 
 @router.get("")
-async def stock_get(act: str = Query(..., embed=True)):
+async def stock_get(
+    act: str = Query(..., embed=True),
+    date: Optional[str] = Query(None, embed=True),
+):
     if act == "bk_ignored":
         bks = await AllBlocks.read_ignored()
         return [b for b, in bks]
@@ -22,6 +26,10 @@ async def stock_get(act: str = Query(..., embed=True)):
         return await StockMarketStats.latest_stats()
     if act == "f4lost":
         return await AllStocks.get_purelost4up()
+    if act == "dtmap":
+        sdm = StockDtMap()
+        dtmap = sdm.dumpDataByDate(date)
+        return dtmap        
     return {"message": f"Hello {act}"}
 
 @router.post("", openapi_extra=pparam_doc([("act", "string", "act", True)]))

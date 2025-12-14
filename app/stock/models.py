@@ -196,6 +196,19 @@ class MdlDayZtConcepts(Base):
     )
 
 
+class MdlDayDtMap(Base):
+    __tablename__ = "day_dt_maps"
+
+    time = Column(String(20), nullable=False)
+    code = Column(String(10), nullable=False)
+    step = Column(SmallInteger, nullable=False)
+    success = Column(SmallInteger, nullable=False)
+
+    __table_args__ = (
+        PrimaryKeyConstraint('time', 'code', name='pk_day_dt_maps'),
+    )
+
+
 class MdlSMStats(Base):
     __tablename__ = "stock_market_stats"
 
@@ -227,6 +240,7 @@ class UserStocks(Base):
 
 class UserStrategy(Base):
     __tablename__ = "user_strategy"
+
     user_id = Column(Integer, nullable=False)
     code = Column(String(10), primary_key=True)
     id = Column(Integer, primary_key=True)
@@ -236,12 +250,14 @@ class UserStrategy(Base):
 
 class UserCostdog(Base):
     __tablename__ = "user_costdog"
+
     ckey = Column(String(20), primary_key=True)
     user_id = Column(Integer, nullable=False)
     data = Column(String(255))
 
 class UcostdogUrque(Base):
     __tablename__ = "ucostdog_urque"
+
     ckey = Column(String(20), primary_key=True)
     id = Column(Integer, primary_key=True)
     user_id = Column(Integer, nullable=False)
