@@ -37,13 +37,13 @@ router.include_router(
 
 @router.get("/users/me", response_model=UserRead, tags=["users"])
 async def users_me(
-    basic_user: User = Depends(get_current_user_basic),
-    bearer_user: User = Depends(fastapi_users.current_user(optional=True))
+    basic_user: Optional[User] = Depends(get_current_user_basic),
+    bearer_user: Optional[User] = Depends(fastapi_users.current_user(optional=True)),
+    current_user: Optional[User] = Depends(current_active_user),
 ):
-    if bearer_user:
-        return bearer_user
-    elif basic_user:
-        return basic_user
+    user = current_user or basic_user or bearer_user
+    if user:
+        return user
     else:
         raise HTTPException(status_code=404, detail="用户不存在")
 

@@ -1,6 +1,9 @@
-from fastapi import APIRouter, Query, HTTPException
+from fastapi import APIRouter, Query, HTTPException, Depends
 from typing import Optional
 from app import PostParams, pparam_doc
+from app.users.manager import (
+    User, fastapi_users, current_active_user, get_current_user_basic, verify_user,
+    UserStockManager as usm)
 from .manager import AllStocks, AllBlocks, StockMarketStats
 from .history import StockDtMap
 from .schemas import PmStock
@@ -29,11 +32,39 @@ async def stock_get(
     if act == "dtmap":
         sdm = StockDtMap()
         dtmap = sdm.dumpDataByDate(date)
-        return dtmap        
+        return dtmap
     return {"message": f"Hello {act}"}
 
-@router.post("", openapi_extra=pparam_doc([("act", "string", "act", True)]))
-async def stock_post(act: str = PostParams.create("act")):
+@router.post("", openapi_extra=pparam_doc([
+    ("act", "string", "act", True),
+    ("acc", "string", "acc", False),
+    ("accid", "integer", "10", False),
+    ("data", "string", "{}", False)
+]))
+async def stock_post(
+    act: str = PostParams.create("act"),
+    acc: Optional[str] = PostParams.create("acc"),
+    accid: Optional[int] = PostParams.create("accid"),
+    data: Optional[str] = PostParams.create("data"),
+    basic_user: Optional[User] = Depends(get_current_user_basic),
+    bearer_user: Optional[User] = Depends(fastapi_users.current_user(optional=True)),
+    current_user: Optional[User] = Depends(current_active_user),
+):
+    if act in ('deals', 'fixdeals', 'strategy', 'forget', 'costdog', 'rmwatch'):
+        user = await verify_user(current_user or basic_user or bearer_user, acc, accid)
+        if act == 'deals':
+            await usm.add_deals(user, data)
+        elif act == 'fixdeals':
+            await usm.fix_deals(user, data)
+        elif act == 'strategy':
+            await usm.save_strategy(user, data)
+        elif act == 'forget':
+            await usm.forget_stock(user, data)
+        elif act == 'costdog':
+            usm.save_costdog(user, data)
+        elif act == 'rmwatch':
+            usm.remove_user_stock_with_deals(user, data)
+        return
     return {"message": f"Hello {act}"}
 
 @router.get("/allstockinfo", response_model=list[PmStock])

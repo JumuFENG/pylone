@@ -52,7 +52,11 @@ class AllStocks:
 
     @classmethod
     async def stock_name(cls, code):
-        await query_one_value(cls.db, 'name', cls.db.code == code)
+        return await query_one_value(cls.db, 'name', cls.db.code == code)
+
+    @classmethod
+    async def is_exists(cls, code):
+        return code == await query_one_value(cls.db, 'code', cls.db.code == code)
 
     @classmethod
     async def update_kline_data(cls, kltype='d', sectype: str = None):
@@ -131,8 +135,8 @@ class AllStocks:
         if is_test:
             logger.warning('testing, skip!')
             return cns.keys()
-        srt.set_default_sources('stock_list', 'stocklistapi', ('eastmoney', 'sina'), False)
-        stock_list = srt.stock_list()
+        sina = srt.rtsource('sina')
+        stock_list = sina.stock_list()
         if 'all' not in stock_list:
             return
 

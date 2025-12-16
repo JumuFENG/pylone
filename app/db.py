@@ -29,6 +29,15 @@ async def query_one_value(model, field, *clauses):
         result = await session.execute(select(column).where(*clauses))
         return result.scalar()
 
+async def query_one_record(model, *clauses):
+    """
+    查询单条记录
+    返回: 记录对象
+    """
+    async with async_session_maker() as session:
+        result = await session.execute(select(model).where(*clauses))
+        return result.scalar_one_or_none()
+
 async def query_values(model, fields=None, *clauses):
     """
     查询多个字段的值
@@ -70,7 +79,7 @@ async def query_aggregate(func_type, model, field, *clauses):
         if not agg_func:
             raise ValueError(f"Unsupported function type: {func_type}")
 
-        query = select(agg_func(getattr(model, field)))
+        query = select(agg_func(getattr(model, field) if isinstance(field, str) else field))
         if clauses:
             query = query.where(*clauses)
         result = await session.execute(query)

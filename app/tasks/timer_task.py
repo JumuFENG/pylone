@@ -114,6 +114,8 @@ class TimerTask:
                     break
 
                 # 执行任务
+                if self.interval >= 60:
+                    logger.info(f"定时任务 {self.function.__name__ if self.function else self.__class__.__name__} 执行")
                 await self._call_execute_task()
 
                 # 下次执行前等待
