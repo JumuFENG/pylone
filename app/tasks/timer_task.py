@@ -288,7 +288,7 @@ class Timers:
             cls.add_timer_task(stock_market_opening_task, '9:25:00', '15:00:00')
             cls.add_timer_task(update_daily_trade_closed_history, '15:01:00')
         cls.add_timer_task(cls.run_regular_tasks, '8:47:00', '9:11:00')
-        cls.add_timer_task(bk_changes_prepare_task, '9:16:00', '15:00:00')
+        cls.add_timer_task(bk_changes_prepare_task, '9:16:00', '9:30:00')
         cls.add_timer_task(cls.run_regular_tasks, '16:58:00', '23:59:00')
         cls.add_timer_task(update_bkchanges_history, '15:01:04')
         cls.add_timer_task(save_earning_task, '15:02:03')

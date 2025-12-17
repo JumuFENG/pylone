@@ -139,7 +139,6 @@ fastapi_users = FastAPIUsers[User, int](
     [cookie_auth_backend, bearer_auth_backend],
 )
 
-current_active_user = fastapi_users.current_user(active=True)
 current_superuser = fastapi_users.current_user(superuser=True)
 
 async def verify_user(parent, acc=None, accid=None):

@@ -6,7 +6,7 @@ import numpy as np
 from datetime import datetime
 from bs4 import BeautifulSoup
 from traceback import format_exc
-from typing import Optional
+from typing import Optional, List, Any
 from numpy.lib.recfunctions import append_fields
 from stockrt.sources.rtbase import rtbase
 from app.lofig import logger
@@ -82,6 +82,9 @@ class Khistory:
             length = def_len
         code = rtbase.get_fullcode(code)
         kldata = kls.read_kline_data(code, klt, max(length, def_len))
+        if kldata is None:
+            return None
+
         if len(kldata) > length:
             kldata = kldata[-length:]
 
@@ -441,7 +444,7 @@ class StockShareBonus(EmDataCenterRequest):
                 'bonus_details': bn['IMPL_PLAN_PROFILE']
             })
         if len(values) > 0:
-            insert_many(self.db, values)
+            await insert_many(self.db, values)
 
     async def dividenDateLaterThan(self, code, date=None):
         if date is None:
@@ -500,7 +503,7 @@ class FundShareBonus(StockShareBonus):
             return
 
         cols = [c.name for c in self.db.__table__.columns]
-        upsert_many(self.db, [dict(zip(cols, row)) for row in self.fecthed], ['code', 'report_date'])
+        await upsert_many(self.db, [dict(zip(cols, row)) for row in self.fecthed], ['code', 'report_date'])
         self.fecthed = []
 
     async def getBonusHis(self, code):
@@ -538,7 +541,7 @@ class StockBaseSelector():
         if len(self.wkselected) > 0:
             await insert_many(self.db, array_to_dict_list(self.db, self.wkselected), ['code', 'time'])
 
-    async def task_processing(self, worker_id: int) -> None:
+    async def task_processing(self, item) -> None:
         """任务处理逻辑"""
         pass
 
@@ -555,15 +558,31 @@ class StockBaseSelector():
         ctime = datetime.now()
 
         if self.max_workers <= 1:
-            await self.task_processing(0)
+            for item in self.wkstocks:
+                await self.task_processing(item)
         else:
-            tasks = []
-            for i in range(self.max_workers):
-                task = asyncio.create_task(
-                    asyncio.to_thread(self.task_processing, i)
-                )
-                tasks.append(task)
-            await asyncio.gather(*tasks)
+            q = asyncio.Queue()
+            for item in self.wkstocks:
+                await q.put(item)
+
+            async def _worker():
+                while True:
+                    try:
+                        item = await q.get()
+                    except asyncio.CancelledError:
+                        break
+                    try:
+                        await self.task_processing(item)
+                    except Exception:
+                        logger.error('error in task_processing %s', format_exc())
+                    finally:
+                        q.task_done()
+
+            workers = [asyncio.create_task(_worker()) for _ in range(self.max_workers)]
+            await q.join()
+            for w in workers:
+                w.cancel()
+            await asyncio.gather(*workers, return_exceptions=True)
 
         # 记录执行时间
         elapsed = datetime.now() - ctime
@@ -742,14 +761,14 @@ class StockChanges(EmRequest):
         chgs = json.loads(self.getRequest(self.headers))
         if 'data' not in chgs or chgs['data'] is None:
             if len(self.fecthed) > 0:
-                self.saveFetched()
+                await self.saveFetched()
             return
 
         if 'allstock' in chgs['data']:
             self.mergeFetched(chgs['data']['allstock'])
 
         if len(self.fecthed) == chgs['data']['tc']:
-            self.saveFetched()
+            await self.saveFetched()
         else:
             self.page += 1
             await self.getNext()
@@ -773,12 +792,12 @@ class StockChanges(EmRequest):
         if len(self.fecthed) == 0:
             return
 
-        await insert_many(MdlStockChanges, self.fecthed)
+        await insert_many(MdlStockChanges, array_to_dict_list(MdlStockChanges, self.fecthed))
 
     async def updateDaily(self):
-        date = await query_aggregate('max', MdlStockChanges, 'date')
+        date = await query_aggregate('max', MdlStockChanges, 'time')
         self.date = TradingDate.max_trading_date()
-        if date.startswith(self.date):
+        if date and date.startswith(self.date):
             logger.info(f'{self.__class__.__name__} already updated to {self.date}')
             return
 
@@ -897,7 +916,7 @@ class BkChanges(EmRequest):
             for i in range(kickid, len(hist)):
                 tch += hist[i][2]
             tch = round(tch, 2)
-            name = query_one_value(MdlStockBkMap, 'name', MdlStockBkMap.stock == c)
+            name = await query_one_value(MdlStockBkMap, 'name', MdlStockBkMap.stock == c)
             kick_days = TradingDate.calc_trading_days(hist[kickid][1], min(hist[-1][1], TradingDate.max_trading_date()))
             if len(topbktetail.keys()) == 0 or tch > list(topbktetail.values())[0]['change_to_date']:
                 topbktetail[c] = {'code':c, 'name':name, 'kickdate': hist[kickid][1], 'change_to_date': tch, 'kick_days': kick_days}
@@ -1384,55 +1403,53 @@ class StockZtDaily(StockBaseSelector):
         if osel[5] != sel[5]:
             osel[5] = sel[5]
 
-    async def task_processing(self, worker_id):
-        while len(self.wkstocks) > 0:
-            c,zdate,sdate = self.wkstocks.pop(0)
-            allkl = await self.get_kd_data(c, start=sdate)
-            if allkl is None or len(allkl) == 0:
+    async def task_processing(self, item):
+        c, zdate, sdate = item
+        allkl = await self.get_kd_data(c, start=sdate)
+        if allkl is None or len(allkl) == 0:
+            return
+
+        zdf = zdf_from_code(c)
+        if zdf == 10 and await self.is_st_stock(c):
+            zdf = 5
+        mkt = [10, 20, 30, 5].index(zdf)
+
+        i = 0
+        while i < len(allkl):
+            if allkl[i].time < zdate:
+                i += 1
+                continue
+            if i == 0 and allkl[i].close == allkl[i].high and allkl[i].change * 100 >= zdf - 0.1:
+                await self.merge_selected([c, allkl[i].time, 0, 0, 1, 1, 0, "", "", mkt])
+                i += 1
                 continue
 
-            zdf = zdf_from_code(c)
-            if zdf == 10 and await self.is_st_stock(c):
-                zdf = 5
-            mkt = [10, 20, 30, 5].index(zdf)
-
-
-            i = 0
-            while i < len(allkl):
-                if allkl[i].time < zdate:
-                    i += 1
-                    continue
-                if i == 0 and allkl[i].close == allkl[i].high and allkl[i].change * 100 >= zdf - 0.1:
-                    await self.merge_selected([c, allkl[i].time, 0, 0, 1, 1, 0, "", "", mkt])
-                    i += 1
-                    continue
-
-                c0 = allkl[i-1].close
-                if allkl[i].close == allkl[i].high and allkl[i].close >= zt_priceby(c0, zdf=zdf):
-                    days = 1
-                    lbc = 1
-                    t = i
-                    j = i - 1
-                    while j >= 0:
-                        if j == 0:
-                            if allkl[j].change * 100 >= zdf - 0.1:
-                                lbc += 1
-                                days += t
-                            break
-                        c0 = allkl[j-1].close
-                        if allkl[j].close == allkl[j].high and allkl[j].close >= zt_priceby(c0, zdf=zdf):
+            c0 = allkl[i-1].close
+            if allkl[i].close == allkl[i].high and allkl[i].close >= zt_priceby(c0, zdf=zdf):
+                days = 1
+                lbc = 1
+                t = i
+                j = i - 1
+                while j >= 0:
+                    if j == 0:
+                        if allkl[j].change * 100 >= zdf - 0.1:
                             lbc += 1
-                            days += t - j
-                            t = j
-                            j -= 1
-                            continue
-                        if t - j >= 3:
-                            break
+                            days += t
+                        break
+                    c0 = allkl[j-1].close
+                    if allkl[j].close == allkl[j].high and allkl[j].close >= zt_priceby(c0, zdf=zdf):
+                        lbc += 1
+                        days += t - j
+                        t = j
                         j -= 1
-                    if lbc == 1:
-                        days = 1
-                    await self.merge_selected([c, allkl[i].time, 0, 0, lbc, days, 0, "", "", mkt])
-                i += 1
+                        continue
+                    if t - j >= 3:
+                        break
+                    j -= 1
+                if lbc == 1:
+                    days = 1
+                await self.merge_selected([c, allkl[i].time, 0, 0, lbc, days, 0, "", "", mkt])
+            i += 1
 
     async def get_hot_stocks(self, date):
         zts = await query_values(self.db, ['code', 'time', 'days', 'lbc'], self.db.time == date)
@@ -1625,6 +1642,10 @@ class StockDtMap(StockBaseSelector):
     @property
     def db(self):
         return MdlDayDtMap
+    
+    @property
+    def dtinfo(self):
+        return StockDtInfo()
 
     async def getdtl(self, code, step):
         dtl = []
@@ -1638,16 +1659,20 @@ class StockDtMap(StockBaseSelector):
 
     async def start_multi_task(self, mpdate):
         mxdate = TradingDate.max_trading_date()
-        premap = self.dumpDataByDate(mpdate)
-        if premap['date'] != mpdate:
+        premap = await self.dumpDataByDate(mpdate)
+        if mpdate is None:
+            mpdate = await query_aggregate('min', self.dtinfo.db, 'time')
+        if premap and premap['date'] != mpdate:
             logger.info('data invalid %s', premap)
             return
 
-        premap = premap['data']
-        sdt = StockDtInfo()
+        if premap is None:
+            premap = []
+        else:
+            premap = premap['data']
         while mpdate < mxdate:
             nxdate = TradingDate.next_trading_date(mpdate)
-            nxdt = sdt.dumpDataByDate(nxdate)
+            nxdt = await self.dtinfo.dumpDataByDate(nxdate)
             if nxdt is None or nxdate != nxdt['date']:
                 logger.info('dt data for %s not invalid %s', nxdate, nxdt)
                 break
@@ -1669,10 +1694,10 @@ class StockDtMap(StockBaseSelector):
 
             for code, step, suc in premap:
                 if code not in self.dtdtl:
-                    self.dtdtl[code] = self.getdtl(code, step)
+                    self.dtdtl[code] = await self.getdtl(code, step)
 
                 dtl = self.dtdtl[code]
-                kd = self.get_kd_data(code, start=dtl[-1]['date'])
+                kd = await self.get_kd_data(code, start=dtl[-1]['date'])
                 lkl = [k for k in kd if k.time == nxdate]
                 if len(lkl) != 1:
                     if lkl[-1].time < nxdate:
@@ -1721,4 +1746,4 @@ class StockDtMap(StockBaseSelector):
                 return data
             date = TradingDate.next_trading_date(date)
 
-        return self.dumpDataByDate()
+        return await self.dumpDataByDate()

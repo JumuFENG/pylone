@@ -41,12 +41,12 @@ class DailyUpdater():
 
         await cls.download_all_index_history()
         cls.update_stock_hotrank()
-        cls.update_new_stocks()
+        await cls.update_new_stocks()
         if morningOnetime:
             # 只在早上执行的任务
             logger.info("update in the morning...")
             # 分红派息，每天更新一次即可
-            cls.download_newly_noticed_bonuses()
+            await cls.download_newly_noticed_bonuses()
         else:
             # 只在晚上执行的任务
             logger.info("update in the afternoon")
@@ -57,11 +57,11 @@ class DailyUpdater():
             # 涨跌停数据，可以间隔，早晚都合适
             await cls.fetch_zdt_stocks()
             # 盘口异动数据, 每个交易日收盘后更新, 错过无法补录
-            cls.update_stock_changes()
+            await cls.update_stock_changes()
             #
-            cls.update_selectors()
+            await cls.update_selectors()
         # 早上也执行的任务，以防前一晚上没执行
-        cls.update_twice_selectors()
+        await cls.update_twice_selectors()
 
     @classmethod
     async def download_all_index_history(cls):
@@ -99,20 +99,20 @@ class DailyUpdater():
         logger.info('download_all_stocks_khistory done! %d' % len(allcodes))
 
     @classmethod
-    def update_new_stocks(cls):
+    async def update_new_stocks(cls):
         # 新股信息，可以间隔几天更新一次
         logger.info('update new stocks info')
         try:
-            AllStocks.load_new_stocks()
+            await AllStocks.load_new_stocks()
         except Exception as e:
             logger.info(e)
 
     @classmethod
-    def download_newly_noticed_bonuses(cls):
+    async def download_newly_noticed_bonuses(cls):
         logger.info("update noticed bonuses")
         try:
             dbns = StockShareBonus()
-            dbns.getNext()
+            await dbns.getNext()
         except Exception as e:
             logger.info(e)
         # logger.info('update announcements')
@@ -140,7 +140,7 @@ class DailyUpdater():
 
         logger.info('update dt info')
         dtinfo = StockDtInfo()
-        dtinfo.getNext()
+        await dtinfo.getNext()
 
     @classmethod
     def fetch_dfsorg_stocks(cls):
@@ -153,10 +153,10 @@ class DailyUpdater():
         pass
 
     @classmethod
-    def update_selectors(cls):
+    async def update_selectors(cls):
         logger.info('update dtmap info')
         sdm = StockDtMap()
-        sdm.update_pickups()
+        await sdm.update_pickups()
 
         # logger.info('update dt3')
         # dts = StockDt3Selector()
@@ -174,7 +174,7 @@ class DailyUpdater():
         #     sel.updatePickUps()
 
     @classmethod
-    def update_twice_selectors(cls):
+    async def update_twice_selectors(cls):
         # selectors = [
         #     StockUstSelector()]
         # for sel in selectors:
@@ -189,16 +189,17 @@ class DailyUpdater():
         pass
 
     @classmethod
-    def update_stock_changes(cls):
+    async def update_stock_changes(cls):
         sch = StockChanges()
-        sch.updateDaily()
+        await sch.updateDaily()
 
+    @classmethod
     async def update_fixzdt(self):
-        await self.fetch_zdt_stocks()
-        self.update_stock_changes()
-        self.update_selectors()
-        self.update_twice_selectors()
+        # await self.fetch_zdt_stocks()
+        await self.update_stock_changes()
+        await self.update_selectors()
+        await self.update_twice_selectors()
 
 
 if __name__ == '__main__':
-    asyncio.run(DailyUpdater.update_all())
+    asyncio.run(DailyUpdater.update_selectors())

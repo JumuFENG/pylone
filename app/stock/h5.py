@@ -156,6 +156,8 @@ class H5Storage:
             return
         group = cls.h5_saved_group(kline_type)
         with h5py.File(file_path, 'r') as f:
+            if group not in f or fcode not in f[group]:
+                return
             final_len = length if length > 0 else len(f[group][fcode])
             klines = cls.restore_data(f[group][fcode][-final_len:])
             if kline_type > 100 and kline_type % 15 != 0:

@@ -62,6 +62,11 @@ async def admin_redirect():
 async def settings_redirect():
     return RedirectResponse(url="/html/settings.html")
 
+# deprecated
+@app.get("/userbind")
+async def userbind_redirect():
+    return RedirectResponse(url="/users/bind")
+
 
 if __name__ == '__main__':
     import uvicorn

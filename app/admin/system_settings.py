@@ -170,6 +170,9 @@ class SystemSettings:
             ('lastmonthly_run_at', '', '每月更新于', SettingValueType.READONLY),
             ('realtime_kline_enabled', '1', '实盘数据', SettingValueType.BOOLEAN),
             ('bkchanges_update_realtime', '1', '板块异动', SettingValueType.BOOLEAN),
+            ('daily_15min', '1', '15分钟', SettingValueType.BOOLEAN),
+            ('daily_5min', '0', '5分钟', SettingValueType.BOOLEAN),
+            ('daily_1min', '1', '1分钟', SettingValueType.BOOLEAN),
         ]
 
         for key, value, name, valtype in defaults:

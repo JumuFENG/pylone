@@ -1,12 +1,11 @@
 from typing import List, Optional
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Query
 from sqlalchemy import select
 from app.db import async_session_maker
 from .manager import (
     fastapi_users,
     cookie_auth_backend,
     bearer_auth_backend,
-    current_active_user,
     current_superuser,
     get_user_manager,
     get_user_db,
@@ -38,10 +37,9 @@ router.include_router(
 @router.get("/users/me", response_model=UserRead, tags=["users"])
 async def users_me(
     basic_user: Optional[User] = Depends(get_current_user_basic),
-    bearer_user: Optional[User] = Depends(fastapi_users.current_user(optional=True)),
-    current_user: Optional[User] = Depends(current_active_user),
+    bearer_user: Optional[User] = Depends(fastapi_users.current_user(optional=True))
 ):
-    user = current_user or basic_user or bearer_user
+    user = basic_user or bearer_user
     if user:
         return user
     else:
@@ -51,7 +49,7 @@ async def users_me(
 async def update_user_protected(
     user_id: int,
     user_update: UserUpdate,
-    current_user: User = Depends(current_active_user)
+    current_user: User = Depends(fastapi_users.current_user(active=True))
 ):
     """更新用户信息（保护 ID 为 1 的超级管理员）"""
     # 保护超级管理员
@@ -99,9 +97,23 @@ async def delete_user_protected(
             return
 
 @router.get("/users/subaccounts", response_model=List[UserRead], tags=["users"])
-async def get_subaccounts(user=Depends(current_active_user)):
+async def get_subaccounts(user=Depends(fastapi_users.current_user(active=True))):
     """获取子账户列表"""
     async with async_session_maker() as session:
         result = await session.execute(select(User).where(User.parent_id == user.id))
+        users = result.scalars().all()
+    return users
+
+@router.get("/users/bind", response_model=List[UserRead], tags=["users"])
+async def get_userbind(
+    onlystock: Optional[bool] = Query(default=False),
+    basic_user: Optional[User] = Depends(get_current_user_basic),
+    bearer_user: Optional[User] = Depends(fastapi_users.current_user(optional=True))
+):
+    """获取子账户列表"""
+    user = basic_user or bearer_user
+    async with async_session_maker() as session:
+        parent_id = user.parent_id or user.id
+        result = await session.execute(select(User).where(User.parent_id == parent_id))
         users = result.scalars().all()
     return users

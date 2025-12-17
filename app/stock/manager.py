@@ -208,6 +208,7 @@ class AllStocks:
             })
 
         if newstocks:
+            logger.info('load %d new stocks', len(newstocks))
             await upsert_many(cls.db, newstocks, ['code'])
 
     @classmethod

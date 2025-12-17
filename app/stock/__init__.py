@@ -47,11 +47,10 @@ def _make_async_cache_decorator(cache_getter, has_ttl: bool = False):
     """
     def decorator_factory(ttl=None):
         def decorator(func):
-            cache = cache_getter(ttl) if has_ttl else cache_getter()
             lock = asyncio.Lock()
-
             @wraps(func)
             async def wrapper(*args, **kwargs):
+                cache = cache_getter(ttl) if has_ttl else cache_getter()
                 key = make_cache_key(func, args, kwargs)
                 if key in cache:
                     return cache[key]
@@ -60,9 +59,9 @@ def _make_async_cache_decorator(cache_getter, has_ttl: bool = False):
                     if key in cache:
                         return cache[key]
 
-                result = await func(*args, **kwargs)
-                cache[key] = result
-                return result
+                    result = await func(*args, **kwargs)
+                    cache[key] = result
+                    return result
             return wrapper
         return decorator
     return decorator_factory
