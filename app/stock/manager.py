@@ -3,6 +3,7 @@ import json
 import gzip
 import numpy as np
 from typing import List, Tuple
+from traceback import format_exc
 from datetime import datetime
 import stockrt as srt
 from stockrt.sources.eastmoney import Em
@@ -478,6 +479,7 @@ class StockMarketStats():
                 self.lateststats.append(sm_statistics)
         except Exception as e:
             logger.info(e)
+            logger.debug(traceback.format_exc())
 
     @classmethod
     async def save_stats(self, stats):

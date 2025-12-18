@@ -1,5 +1,7 @@
 from fastapi import APIRouter, Query, HTTPException
+from fastapi.responses import RedirectResponse
 from typing import Optional
+from urllib.parse import urlencode
 import requests
 import base64
 from app import PostParams, pparam_doc
@@ -9,8 +11,7 @@ from app.admin.system_settings import SystemSettings
 from .stock.history import Khistory as khis, StockZtDaily, StockDtInfo
 from .stock.date import TradingDate
 from .stock.manager import AllStocks, AllBlocks
-from .stock.quotes import Quotes as qot
-
+from .stock.router import stock_kline
 
 router = APIRouter(
     prefix="/api",
@@ -34,32 +35,7 @@ async def stock_hist(
     length: int = Query(None, ge=0),
     start: str = Query(None, min_length=8, max_length=10)
 ):
-    try:
-        if ',' in code:
-            code = code.split(',')
-        else:
-            code = [code]
-
-        result = {}
-        for c in code:
-            data = await khis.read_kline(c, kltype, 0, length, start)
-            result[c] = data.tolist()
-
-        realtime_kline_enabled = await SystemSettings.get('realtime_kline_enabled', '0')
-        if realtime_kline_enabled == '1':
-            qklines = qot.get_klines(code, kltype)
-            for c, kl in qklines.items():
-                if c not in result:
-                    result[c] = kl
-                    continue
-                if result[c][-1][0] < kl[0][0]:
-                    result[c].extend(kl)
-        if fqt > 0:
-            for c, kl in result.items():
-                result[c] = await khis.fix_price(c, kl, fqt)
-        return result
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    return await stock_kline(code, kltype, fqt, length, start)
 
 @router.get("/stockzthist")
 async def stock_zthist(

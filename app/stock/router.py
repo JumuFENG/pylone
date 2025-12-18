@@ -4,8 +4,11 @@ from app import PostParams, pparam_doc
 from app.users.manager import (
     User, fastapi_users, get_current_user_basic, verify_user,
     UserStockManager as usm)
+from app.admin.system_settings import SystemSettings
+from .date import TradingDate
 from .manager import AllStocks, AllBlocks, StockMarketStats
-from .history import rtbase, StockDtMap
+from .history import rtbase, StockDtMap, Khistory as khis
+from .quotes import Quotes as qot
 from .schemas import PmStock
 
 
@@ -83,3 +86,36 @@ async def stock_post(
 async def get_all_stock_info():
     return await AllStocks.read_all()
 
+@router.get("/kline")
+async def stock_kline(
+    code: str = Query(..., min_length=6),
+    kltype: str = Query(...),
+    fqt: int = Query(0, ge=0),
+    length: int = Query(None, ge=0),
+    start: str = Query(None, min_length=8, max_length=10)
+):
+    try:
+        code = qot._normalize_codes(code)
+
+        result = {}
+        codes_unfinished = []
+        for c in code:
+            data = await khis.read_kline(c, kltype, 0, length, start)
+            result[c] = data.tolist()
+            if result[c][-1][0] < TradingDate.max_trading_date():
+                codes_unfinished.append(c)
+
+        realtime_kline_enabled = await SystemSettings.get('realtime_kline_enabled', '0')
+        if realtime_kline_enabled == '1' and len(codes_unfinished) > 0:
+            qklines = qot.get_klines(codes_unfinished, kltype)
+            for c, kl in qklines.items():
+                if c not in result:
+                    result[c] = kl
+                    continue
+                if result[c][-1][0] < kl[0][0]:
+                    result[c].extend(kl)
+                    if fqt > 0:
+                        result[c] = await khis.fix_price(c, result[c], fqt)
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

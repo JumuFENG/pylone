@@ -50,7 +50,7 @@ class Khistory:
             return months // 6
         if kltype == 'y' or kltype == 106:
             return months // 12
-        days = TradingDate.calc_trading_days(last_date, TradingDate.max_trading_date())
+        days = TradingDate.calc_trading_days(last_date, TradingDate.max_trading_date()) - 1
         if kltype == 'd' or kltype == 101:
             return days
         if isinstance(kltype, int) or kltype.isdigit():
@@ -444,7 +444,7 @@ class StockShareBonus(EmDataCenterRequest):
                 'bonus_details': bn['IMPL_PLAN_PROFILE']
             })
         if len(values) > 0:
-            await insert_many(self.db, values)
+            await insert_many(self.db, values, ['code', 'report_date'])
 
     async def dividenDateLaterThan(self, code, date=None):
         if date is None:
@@ -916,7 +916,7 @@ class BkChanges(EmRequest):
             for i in range(kickid, len(hist)):
                 tch += hist[i][2]
             tch = round(tch, 2)
-            name = await query_one_value(MdlStockBkMap, 'name', MdlStockBkMap.stock == c)
+            name = await query_one_value(MdlStockBk, 'name', MdlStockBk.code == c)
             kick_days = TradingDate.calc_trading_days(hist[kickid][1], min(hist[-1][1], TradingDate.max_trading_date()))
             if len(topbktetail.keys()) == 0 or tch > list(topbktetail.values())[0]['change_to_date']:
                 topbktetail[c] = {'code':c, 'name':name, 'kickdate': hist[kickid][1], 'change_to_date': tch, 'kick_days': kick_days}
@@ -1650,7 +1650,7 @@ class StockDtMap(StockBaseSelector):
     async def getdtl(self, code, step):
         dtl = []
         for i in range(1, step + 1):
-            detail = await query_values(self.db, ['date'], self.db.code == code, self.db.step == i, self.db.success == 1)
+            detail = await query_values(self.db, ['time'], self.db.code == code, self.db.step == i, self.db.success == 1)
             if len(detail) > 0:
                 ctdate, = detail[-1]
                 if len(dtl) == 0 or ctdate > dtl[0]['date']:
@@ -1698,6 +1698,8 @@ class StockDtMap(StockBaseSelector):
 
                 dtl = self.dtdtl[code]
                 kd = await self.get_kd_data(code, start=dtl[-1]['date'])
+                if not kd:
+                    continue
                 lkl = [k for k in kd if k.time == nxdate]
                 if len(lkl) != 1:
                     if lkl[-1].time < nxdate:
