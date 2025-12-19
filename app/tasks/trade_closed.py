@@ -49,24 +49,34 @@ async def update_bkchanges_history():
         await AllBlocks.update_bk_changed_in5days()
     except Exception as e:
         logger.error(f'Error updating bk changes history: {e}')
-        logger.error(format_exc())
+        logger.debug(format_exc())
 
-
+async def update_stock_transactions():
+    try:
+        await AllStocks.update_stock_transactions()
+    except Exception as e:
+        logger.error(f'Error updating stock transactions: {e}')
+        logger.debug(format_exc())
 
 async def update_daily_trade_closed_history():
     try:
         await AllStocks.update_kline_data('d', sectype='Index')
+        logger.info('index history updated!')
         TradingDate.clear_cache()
         await AllStocks.update_kline_data('d')
+        logger.info('stock history updated!')
         if await SystemSettings.get('daily_15min', '0') == '1':
+            logger.info('update 15min history')
             await AllStocks.update_kline_data(15)
         if await SystemSettings.get('daily_5min', '0') == '1':
+            logger.info('update 5min history')
             await AllStocks.update_kline_data(5)
         if await SystemSettings.get('daily_1min', '0') == '1':
+            logger.info('update 1min history')
             await AllStocks.update_kline_data(1)
     except Exception as e:
         logger.error(f'Error updating daily history data: {e}')
-        logger.error(format_exc())
+        logger.debug(format_exc())
 
 
 if __name__ == '__main__':

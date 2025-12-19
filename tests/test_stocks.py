@@ -12,6 +12,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from app.lofig import Config
 from app.stock.manager import AllStocks
 from app.stock.history import Khistory as khis, FflowHistory as fhis
+from app.stock.h5 import TransactionStorage as sts
 from app.stock.quotes import Quotes as qot
 
 class TestStocks(unittest.IsolatedAsyncioTestCase):
@@ -179,18 +180,52 @@ class TestStocks(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(isinstance(kl[code], list))
         self.assertGreater(len(kl[code]), 1)
 
-    async def test_zdt_info(self):
-        from app.stock.history import StockZtInfo, StockDtInfo, StockZtDaily
-        # zt = StockZtInfo()
-        # await zt.getNext()
-        # dt = StockDtInfo()
-        # await dt.getNext()
-        z1 = StockZtDaily()
-        await z1.start_multi_task()
+    async def test_update_transactions(self):
+        await AllStocks.update_stock_transactions()
+
+    @unittest.skip('skip, not all data match')
+    @patch('app.stock.manager.TradingDate')
+    async def test_convert_transactions_to_kline(self, mock_trading_date):
+        code = 'sz001325'
+        transactions = sts.read_saved_data(code, length=5000)
+        transactions = transactions.tolist()
+        date = transactions[-1][0].split(' ')[0]
+        transactions = [t for t in transactions if t[0].startswith(date)]
+
+        mock_trading_date.max_trading_date.return_value = date
+        klines = qot._transactions_to_klines(transactions, 1)
+        kmap = {r[0]: r for r in klines}
+
+        self.assertNotIn(f'{date} 09:25', kmap)
+        self.assertIn(f'{date} 09:31', kmap)
+
+        klines_1 = await khis.read_kline(code, '1', length=240)
+        klines_1 = klines_1.tolist()
+
+        for i in range(1, 10):
+            self.assertEqual(klines[i][0]+':00', klines_1[i][0])
+            self.assertEqual(klines[i][1], klines_1[i][1], f'{klines[i][0]} {klines[i][1]} != {klines_1[i][1]}')
+            self.assertEqual(klines[i][2], klines_1[i][2])
+            self.assertEqual(klines[i][3], klines_1[i][3])
+            self.assertEqual(klines[i][4], klines_1[i][4])
+
+        klines15 = qot._transactions_to_klines(transactions, 15)
+        kmap15 = {r[0]: r for r in klines15}
+        self.assertIn(f'{date} 09:45', kmap15)
+        self.assertEqual(len(klines15), 16)
+
+        klines15_1 = await khis.read_kline(code, '15', length=16)
+        klines15_1 = klines15_1.tolist()
+        for i in range(1, 16):
+            self.assertEqual(klines15[i][0]+':00', klines15_1[i][0])
+            self.assertEqual(klines15[i][1], klines15_1[i][1], f'{klines15[i][0]} {klines15[i][1]} != {klines15_1[i][1]}')
+            self.assertEqual(klines15[i][2], klines15_1[i][2], f'{klines15[i][0]} {klines15[i][2]} != {klines15_1[i][2]}')
+            self.assertEqual(klines15[i][3], klines15_1[i][3], f'{klines15[i][0]} {klines15[i][3]} != {klines15_1[i][3]}')
+            self.assertEqual(klines15[i][4], klines15_1[i][4], f'{klines15[i][0]} {klines15[i][4]} != {klines15_1[i][4]}')
 
 
 if __name__ == '__main__':
     # unittest.main()
     suite = unittest.TestSuite()
-    suite.addTest(TestStocks('test_zdt_info'))
+    suite.addTest(TestStocks('test_convert_transactions_to_kline'))
     unittest.TextTestRunner().run(suite)

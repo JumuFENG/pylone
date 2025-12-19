@@ -5,12 +5,13 @@ import numpy as np
 from datetime import datetime
 from traceback import format_exc
 from typing import Union, List, Dict, Any, Optional
+from bisect import bisect_left
 import stockrt as srt
 from stockrt.sources.rtbase import rtbase
 from app.lofig import logger
 from app.hu import classproperty, time_stamp
 from app.hu.network import Network
-from . import dynamic_cache, get_cache
+from . import dynamic_cache, get_cache, get_async_lru_cache
 from .date import TradingDate
 
 
@@ -23,6 +24,7 @@ class Quotes:
         5: 10,    # 5分钟K线缓存10秒
         15: 30,   # 15分钟K线缓存30秒
         'quotes': 3,  # 实时行情缓存3秒
+        'trans': 3,  # 逐笔成交数据缓存3秒
         'default': 30  # 其他类型默认缓存30秒
     }
 
@@ -159,7 +161,10 @@ class Quotes:
         )
 
         if uncached_codes:
-            new_klines = srt.klines(uncached_codes, kline_type)
+            if kline_type < 100 or kline_type % 15 == 0:
+                new_klines = cls.klines_from_transactions(uncached_codes, kline_type)
+            else:
+                new_klines = srt.klines(uncached_codes, kline_type)
             today = TradingDate.today()
             for c, v in new_klines.items():
                 new_klines[c] = [kl for kl in v if kl[0] >= today]
@@ -168,3 +173,137 @@ class Quotes:
             )
 
         return result
+
+    @classmethod
+    def get_transactions(cls, codes: str) -> Dict[str, Any]:
+        normalized_codes = cls._normalize_codes(codes)
+        cache_duration = cls.CACHE_DURATION_MAP['trans']
+
+        result, uncached_codes = cls._get_cached_data(
+            normalized_codes, 'trans', cache_duration
+        )
+
+        if uncached_codes:
+            new_transactions = srt.transactions(uncached_codes, start=cls._cached_transaction_time(uncached_codes))
+            date = TradingDate.max_trading_date()
+            for c,v in new_transactions.items():
+                new_transactions[c] = [[f'{date} {t[0]}'] + t[1:] for t in v]
+            ttl_cachedata = {c: v[-1][0] for c,v in new_transactions.items() if len(v) > 0}
+            result = cls._cache_and_merge_data(
+                result, ttl_cachedata, 'trans', cache_duration
+            )
+
+            cls._cache_transactions(new_transactions)
+
+        return cls._pick_cached_transactions(normalized_codes)
+
+    @classmethod
+    def _cached_transaction_time(cls, codes: List[str]) -> Dict[str, Any]:
+        cache = get_async_lru_cache()
+        return {c: cache[f'trans_{c}'][-1][0].split(' ')[-1] if cache.get(f'trans_{c}') else '' for c in codes}
+
+    @classmethod
+    def _pick_cached_transactions(cls, codes: List[str]) -> Dict[str, Any]:
+        cache = get_async_lru_cache()
+        return {c: cache[f'trans_{c}'] for c in codes}
+
+    @classmethod
+    def _cache_transactions(cls, transactions: Dict[str, Any]):
+        cache = get_async_lru_cache()
+        for c, v in transactions.items():
+            c_key = f'trans_{c}'
+            olddata = cache.get(c_key)
+            if not olddata:
+                cache[c_key] = v
+                continue
+
+            last_cached_time = olddata[-1][0]
+            times = [t[0] for t in olddata]
+            old_valid_index = bisect_left(times, last_cached_time)
+            cache[c_key] = olddata[:old_valid_index] + [t for t in v if t[0] >= last_cached_time]
+
+    @classmethod
+    def klines_from_transactions(cls, codes: List[str], kline_type: int) -> Dict[str, Any]:
+        trans = cls.get_transactions(codes)
+        result = {}
+        for c, v in trans.items():
+            result[c] = cls._transactions_to_klines(v, kline_type)
+        return result
+
+    @classmethod
+    def _next_bar_time(cls, bar, t, kline_type):
+        def next_bar_hm(h, m):
+            h = int(h)
+            m = int(m)
+            if h == 9 and m < 30:
+                m = 30 + kline_type
+            else:
+                m = 30 + ((m - 30) // kline_type + 1) * kline_type
+
+            if m >= 60:
+                h += m // 60
+                m = m % 60
+            if h == 11 and m > 30:
+                h = 13
+                m -= 30
+            return f'{h:02d}:{m:02d}'
+
+        dt = t.split(' ')
+        hm = dt[-1]
+        if hm >= "15:00" and bar['time'].endswith("15:00"):
+            # 盘后交易, 并入最后一根K线, 仅适用于创业板科创板
+            return None
+
+        if len(dt) == 2:
+            dt = dt[0] + ' '
+        else:
+            dt = ''
+        if not bar or bar['time'].split(' ')[-1] < "09:30":
+            return dt + next_bar_hm(*(hm.split(':')))
+        if t >= bar['time']:
+            return dt + next_bar_hm(*(bar['time'].split(' ')[-1].split(':')))
+        return None
+
+    @classmethod
+    def _transactions_to_klines(cls, transactions: List[List], kline_type: int) -> List[List[Any]]:
+        """
+        将逐笔成交数据转换为K线数据
+
+        Args:
+            transactions: 逐笔成交数据列表，格式为 [t, p, v, a, bs]
+            kline_type: K线类型（分钟数，如1、5、15等）
+
+        Returns:
+            K线数据列表，格式为 [time, open, close, high, low, volume, amount]
+        """
+        if not transactions:
+            return []
+
+        parsed: List[dict] = []
+        bar = {}
+        for trans in transactions:
+            if len(trans) == 4:
+                t, p, v, bs = trans
+            else:
+                t, p, v, a, bs = trans
+
+            amount = p * v
+
+            next_t_str = cls._next_bar_time(bar, t, kline_type)
+            if next_t_str:
+                if bar:
+                    parsed.append(bar)
+                if bar or bs != 8:
+                    bar = {'time': next_t_str, 'open': p, 'close': p, 'high': p, 'low': p, 'volume': v, 'amount': amount}
+                continue
+
+            bar['high'] = max(bar['high'], p)
+            bar['low'] = min(bar['low'], p)
+            bar['close'] = p
+            bar['volume'] += v
+            bar['amount'] += amount
+
+        if bar:
+            parsed.append(bar)
+
+        return [[t['time'], t['open'], t['close'], t['high'], t['low'], t['volume'], t['amount']] for t in parsed]

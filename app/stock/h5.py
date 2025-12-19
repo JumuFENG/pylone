@@ -22,7 +22,8 @@ class TimeConverter:
             date_strs = np.array([date_strs])
         date_strs = np.where(np.char.str_len(date_strs) == 10, np.char.add(date_strs, ' 00:00:00'), date_strs)
         date_strs = np.where(np.char.str_len(date_strs) == 16, np.char.add(date_strs, ':00'), date_strs)
-        dt = np.vectorize(lambda s: int(datetime.strptime(s, self.time_fmt).strftime('%Y%m%d%H%M%S')))
+        fmt = self.time_fmt if '%S' in self.time_fmt else self.time_fmt + ':00'
+        dt = np.vectorize(lambda s: int(datetime.strptime(s, fmt).strftime('%Y%m%d%H%M%S')))
         return dt(date_strs)
 
     def int_to_time(self, date_ints: np.ndarray):
@@ -36,6 +37,7 @@ class TimeConverter:
 class H5Storage:
     hdf5_compress_level = 9
     saved_dtype = {}
+    restore_dtype = {'time': 'U20','volume': 'int64'}
     saved_kline_types = [101]
     price_cols = []
     amount_cols = []
@@ -50,6 +52,14 @@ class H5Storage:
     @classproperty
     def date_converter(cls):
         return TimeConverter()
+
+    @classproperty
+    def known_cols(cls):
+        return ['time'] + cls.price_cols + cls.amount_cols
+
+    @classmethod
+    def time_only_date(cls, kline_type: int=101):
+        return kline_type > 100 and kline_type % 15 != 0
 
     @classmethod
     def prepare_data(cls, df: np.ndarray):
@@ -71,13 +81,16 @@ class H5Storage:
             if col in df.dtype.names:
                 df_int[col] = cls.volume_converter.float_to_int(df[col], dtype='int64')
 
+        for col in df.dtype.names:
+            if col not in cls.known_cols:
+                df_int[col] = df[col].astype(cls.saved_dtype[col])
+
         return df_int
 
     @classmethod
     def restore_data(cls, df_int):
         """还原为浮点数"""
-        dtdict = {'time': 'U20','volume': 'int64'}
-        dtypes = [(col, dtdict.get(col, 'float64')) for col in df_int.dtype.names]
+        dtypes = [(col, cls.restore_dtype.get(col, 'float64')) for col in df_int.dtype.names]
         df_float = np.empty(len(df_int), dtype=dtypes)
 
         if 'time' in df_int.dtype.names:
@@ -92,6 +105,10 @@ class H5Storage:
             if col not in df_int.dtype.names:
                 continue
             df_float[col] = cls.volume_converter.int_to_float(df_int[col])
+
+        for col in df_int.dtype.names:
+            if col not in cls.known_cols:
+                df_float[col] = df_int[col]
 
         return df_float
 
@@ -139,7 +156,8 @@ class H5Storage:
 
             newer_mask = dset_int['time'] >= last_saved_time
             newer_data = dset_int[newer_mask]
-            new_size = len(newer_data) if new_first_time > last_saved_time else len(newer_data) - 1
+            last_time_count = (dset['time'] == last_saved_time).sum()
+            new_size = len(newer_data) if new_first_time > last_saved_time else len(newer_data) - last_time_count
             if new_size > 0:
                 dset.resize((len(dset) + new_size,))
             dset[-len(newer_data):] = newer_data
@@ -160,7 +178,7 @@ class H5Storage:
                 return
             final_len = length if length > 0 else len(f[group][fcode])
             klines = cls.restore_data(f[group][fcode][-final_len:])
-            if kline_type > 100 and kline_type % 15 != 0:
+            if cls.time_only_date(kline_type):
                 klines['time'] = np.vectorize(lambda x: x.split(' ')[0])(klines['time'])
             return klines
 
@@ -208,7 +226,6 @@ class KLineStorage(H5Storage):
             'turnover': 'int32'
         }
 
-    hdf5_compress_level = 9
     saved_kline_types = [1, 5, 15, 101, 102, 103, 104, 105, 106]
     price_cols = ['open', 'high', 'low', 'close', 'change', 'change_px', 'amplitude', 'turnover']
     amount_cols = ['amount', 'volume']
@@ -326,3 +343,36 @@ class FflowStorage(H5Storage):
             dtype=dtypes
         )
         cls.save_dataset(code, np.array(values, dtype=cls.saved_dtype))
+
+
+class TransactionStorage(H5Storage):
+    saved_dtype = {
+        'time': 'int64', # 成交时间
+        'price': 'int32', # 成交价
+        'volume': 'int64', # 成交量
+        'num': 'int32', # 成交笔数
+        'bs': 'u1', # 1: buy, 2: sell 0: 中性盘 / 不明, 8: 集合竞价
+    }
+
+    restore_dtype = {
+        'time': 'U20', # 成交时间
+        'price': 'float', # 成交价
+        'volume': 'int64', # 成交量
+        'num': 'int32', # 成交笔数
+        'bs': 'int32'
+    }
+
+    price_cols = ['price']
+
+    @classproperty
+    def date_converter(cls):
+        return TimeConverter('%Y-%m-%d %H:%M')
+
+    @classmethod
+    def time_only_date(cls, kline_type: int=101):
+        return False
+
+    @classmethod
+    def h5_saved_path(cls, fcode: str=None, kline_type: int=101) -> str:
+        histroy_dir = Config.h5_history_dir()
+        return f"{histroy_dir}/trans_{fcode[2:5]}.h5"

@@ -129,6 +129,7 @@ class DailyUpdater():
             await AllBlocks.load_info('BK0511')
         except Exception as e:
             logger.info(e)
+            logger.debug(traceback.format_exc())
 
         logger.info('update zt info')
         ztinfo = StockZtDaily()
@@ -202,4 +203,4 @@ class DailyUpdater():
 
 
 if __name__ == '__main__':
-    asyncio.run(DailyUpdater.update_selectors())
+    asyncio.run(DailyUpdater.update_stock_changes())

@@ -117,3 +117,4 @@ async def get_userbind(
         result = await session.execute(select(User).where(User.parent_id == parent_id))
         users = result.scalars().all()
     return users
+ 

@@ -50,6 +50,8 @@ class Khistory:
             return months // 6
         if kltype == 'y' or kltype == 106:
             return months // 12
+        if ' ' in last_date:
+            last_date = last_date.split(' ')[0]
         days = TradingDate.calc_trading_days(last_date, TradingDate.max_trading_date()) - 1
         if kltype == 'd' or kltype == 101:
             return days
@@ -69,7 +71,7 @@ class Khistory:
         if rtbase.to_int_kltype(kltype) not in kls.saved_kline_types:
             return 0
         guessed = cls.guess_bars_since(cls.max_date(code, kltype), kltype)
-        return guessed if guessed == sys.maxsize else max(guessed - 1, 0)
+        return guessed if guessed == sys.maxsize else max(guessed, 0)
 
     @classmethod
     async def read_kline(cls, code, kline_type, fqt=0, length=None, start=None):
@@ -77,6 +79,10 @@ class Khistory:
         klt = rtbase.to_int_kltype(kline_type)
         if start is not None:
             length = cls.guess_bars_since(start, klt)
+            if length == sys.maxsize:
+                length = 0
+            else:
+                length += 1
         def_len = kls.default_kline_cache_size(klt)
         if length is None:
             length = def_len

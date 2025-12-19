@@ -11,13 +11,15 @@ from emxg import search_emxg
 from app.hu import classproperty, to_cls_secucode
 from app.lofig import logger
 from app.db import upsert_one, upsert_many, query_one_value, query_aggregate, query_values, delete_records
-from .models import MdlAllStock, MdlStockBk, MdlSMStats
+from .models import MdlAllStock, MdlStockBk, MdlStockBkMap, MdlSMStats
 from .schemas import PmStock
 from .history import (
     Network, array_to_dict_list,
     Khistory as khis, FflowHistory as fhis, StockBkMap, StockBkChanges, StockClsBkChanges, StockZtDaily,
     StockList)
 from .date import TradingDate
+from .quotes import Quotes as qot
+from .h5 import TransactionStorage as sts
 
 
 class AllStocks:
@@ -155,6 +157,9 @@ class AllStocks:
                 result[c]['amplitude'] = (stock['high'] - stock['low']) / stock['lclose']
         unconfirmed = []
         for c, kl in result.items():
+            if kl['open'] == 0 or kl['high'] == 0 or kl['low'] == 0 or kl['close'] == 0:
+                logger.warning(f'invalid kline for {c}')
+                continue
             mxdate = khis.max_date(c, 'd')
             if TradingDate.prev_trading_date(TradingDate.max_trading_date()) == mxdate:
                 dtypes = [('time', 'U10'), ('open', 'float'), ('high', 'float'), ('low', 'float'), ('close', 'float'),
@@ -176,6 +181,17 @@ class AllStocks:
         for r in rows:
             if r.code.startswith(('sh', 'sz', 'bj')) and r.typekind in ('ABStock', 'BJStock'):
                 await fhis.update_fflow(r.code)
+
+    @classmethod
+    async def update_stock_transactions(cls):
+        rows = await query_values(cls.db)
+        stocks = [r.code for r in rows if r.code.startswith(('sh', 'sz', 'bj')) and r.typekind in ('ABStock', 'BJStock')]
+        # TODO: Check max date
+        trans = qot.get_transactions(stocks)
+        for k, v in trans.items():
+            cols = ['time', 'price', 'volume', 'num', 'bs'] if len(v[0]) == 5 else ['time', 'price', 'volume', 'bs']
+            nptrans = np.array([tuple(v_) for v_ in v], [(c, sts.restore_dtype.get(c, 'float64')) for c in cols])
+            sts.save_dataset(k, nptrans)
 
     @classmethod
     async def is_quited(cls, code):
@@ -338,6 +354,16 @@ class AllBlocks:
         clsbkkicks = await cls.clsbkchanges.topbks_to_date()
         return {**embkkicks, **clsbkkicks}
 
+    @classmethod
+    async def bk_stocks(self, bks, union=True):
+        stocks = await query_values(MdlStockBkMap, MdlStockBkMap.stock, MdlStockBkMap.bk._in(bks) if union else MdlStockBkMap.bk.all_(bks))
+        return [s for s, in stocks]
+
+    @classmethod
+    async def stock_bks(self, codes, union=True):
+        bks = await query_values(MdlStockBkMap, MdlStockBkMap.bk, MdlStockBkMap.stock._in(codes) if union else MdlStockBkMap.stock.all_(codes))
+        return [s for s, in bks]
+
 
 class StockMarketStats():
     topbks = None
@@ -353,7 +379,8 @@ class StockMarketStats():
         self.topbks = await AllBlocks.get_topbks()
         self.bkstocklist = {}
         for bk in self.topbks:
-            self.bkstocklist[bk] = [to_cls_secucode(c) for c in StockBkMap.bk_stocks(bk)]
+            stocks = await AllBlocks.bk_stocks(bk)
+            self.bkstocklist[bk] = [to_cls_secucode(c) for c in stocks]
 
         kickdate = TradingDate.prev_trading_date(TradingDate.max_traded_date(), 3) if len(self.topbks.values()) == 0 else min([bk['kickdate'] for bk in self.topbks.values()])
         szt = StockZtDaily()
@@ -479,7 +506,7 @@ class StockMarketStats():
                 self.lateststats.append(sm_statistics)
         except Exception as e:
             logger.info(e)
-            logger.debug(traceback.format_exc())
+            logger.debug(format_exc())
 
     @classmethod
     async def save_stats(self, stats):

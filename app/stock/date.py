@@ -20,11 +20,14 @@ class TradingDate():
     def max_trading_date(self):
         mxdate = self.max_traded_date()
         if mxdate != self.today():
-            sysdate, tradeday = self.get_today_system_date()
+            sysdate, last_date, tradeday = self.get_today_system_date()
             if tradeday:
                 if sysdate > self.trading_dates[-1]:
                     self.trading_dates.append(sysdate)
                 return sysdate
+            if last_date > self.trading_dates[-1]:
+                self.trading_dates.append(last_date)
+                return last_date
         return mxdate
 
     @classmethod
@@ -71,9 +74,12 @@ class TradingDate():
             if 'var whetherTradeDate_global' in sse.text:
                 istrading_date = sse.text.partition('var whetherTradeDate_global')[2].strip(' =;')
                 istrading_date = istrading_date.split()[0].strip(' =;')
+            if 'var lastTradeDate_global' in sse.text:
+                last_trade_date = sse.text.partition('var lastTradeDate_global')[2].strip(' =;')
+                last_trade_date = last_trade_date.split()[0].strip(' =;"')
 
-            return sys_date, json.loads(istrading_date.lower())
-        return None, None
+            return sys_date, last_trade_date, json.loads(istrading_date.lower())
+        return None, None, None
 
     @classmethod
     def is_holiday(self, date):
@@ -81,7 +87,7 @@ class TradingDate():
             return False
 
         if date == self.today():
-            sys_date, tradeday = self.get_today_system_date()
+            sys_date, last_date, tradeday = self.get_today_system_date()
             return not tradeday
 
         return True
