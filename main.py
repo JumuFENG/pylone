@@ -7,6 +7,7 @@ from app.lofig import Config, logger
 from app.users.router import router as users_router
 from app.admin.router import router as admin_router
 from app.stock.router import router as stock_router
+from app.stock.date import TradingDate
 from app.api import router as api_router
 from app.tasks.timer_task import Timers
 from app.admin.system_settings import SystemSettings
@@ -17,6 +18,7 @@ async def lifespan(app: FastAPI):
     # 启动时执行
     await SystemSettings.initialize_defaults()
     await SystemSettings.get_all()
+    await TradingDate.load_holidays()
     Timers.setup()
     yield
     # 关闭时执行（如果需要清理资源）

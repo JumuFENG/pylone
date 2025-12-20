@@ -258,5 +258,19 @@ async def migrate_stock_klines(code: str):
         conn.close()
 
 
+async def setup_holidays():
+    from datetime import datetime, timedelta
+    from app.stock.models import MdlHolidays
+    from app.db import insert_many
+    trading_dates = [ str(d) for d in KLineStorage.read_kline_data('sh000001')['time']]
+    date = datetime.strptime(trading_dates[0], '%Y-%m-%d')
+    holidays = []
+    while date < datetime.now():
+        if date.weekday() < 5 and date.strftime('%Y-%m-%d') not in trading_dates:
+            holidays.append(date.strftime('%Y-%m-%d'))
+        date += timedelta(days=1)
+
+    await insert_many(MdlHolidays, [{'date': d} for d in holidays] )
+
 if __name__ == '__main__':
     asyncio.run(migrate_stock_klines('sh688588'))

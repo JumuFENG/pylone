@@ -79,7 +79,7 @@ async def create_single_table(table_name):
 async def main():
     await check_database()
 
-    for table_name in ['stock_bks', 'stock_bk_map', 'stock_changes', 'stock_changes_embk', 'stock_changes_clsbk']:
+    for table_name in ['holidays']:
         await create_single_table(table_name)
 
     # async with engine.begin() as conn:

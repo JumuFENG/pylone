@@ -54,6 +54,13 @@ class MdlSysSettings(Base):
     valtype = Column(SmallInteger, nullable=False, default=0)
 
 
+class MdlHolidays(Base):
+    __tablename__ = "holidays"
+
+    date = Column(String(10), nullable=False, primary_key=True)
+    reason = Column(String(255), nullable=False, default="")
+
+
 class MdlStockBk(Base):
     __tablename__ = "stock_bks"
 

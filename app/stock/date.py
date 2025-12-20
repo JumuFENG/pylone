@@ -1,50 +1,42 @@
-import bisect
 import json
-import requests
 import datetime
-from app.hu import classproperty, lru_cache
+from bs4 import BeautifulSoup
+from app.hu import lru_cache
+from app.hu.network import Network
+from app.db import query_values, insert_many, array_to_dict_list
 from .h5 import KLineStorage as kls
+from .models import MdlHolidays
 
 
 class TradingDate():
+    holidays = []
     @staticmethod
     def today(sep='-'):
         return datetime.datetime.now().strftime(f'%Y{sep}%m{sep}%d')
 
-    @classproperty
-    def trading_dates(self):
-        return [ str(d) for d in kls.read_kline_data('sh000001')['time']]
+    @classmethod
+    @lru_cache(maxsize=1)
+    def max_trading_date(cls):
+        d = datetime.datetime.now().date()
+        while cls.is_holiday(d.strftime('%Y-%m-%d')):
+            d -= datetime.timedelta(days=1)
+        return d.strftime('%Y-%m-%d')
 
     @classmethod
     @lru_cache(maxsize=1)
-    def max_trading_date(self):
-        mxdate = self.max_traded_date()
-        if mxdate != self.today():
-            sysdate, last_date, tradeday = self.get_today_system_date()
-            if tradeday:
-                if sysdate > self.trading_dates[-1]:
-                    self.trading_dates.append(sysdate)
-                return sysdate
-            if last_date > self.trading_dates[-1]:
-                self.trading_dates.append(last_date)
-                return last_date
-        return mxdate
-
-    @classmethod
-    @lru_cache(maxsize=1)
-    def max_traded_date(self):
+    def max_traded_date(cls):
         return kls.max_date('sh000001')
 
     @classmethod
-    def is_trading_date(self, date):
-        if date == self.max_trading_date():
+    def is_trading_date(cls, date):
+        if date == cls.max_trading_date():
             return True
-        return date in self.trading_dates
+        return date not in cls.holidays and datetime.datetime.strptime(date, '%Y-%m-%d').weekday() < 5
 
     @classmethod
-    def is_trading_time(self):
+    def is_trading_time(cls):
         """根据当前时间判断是否为交易时段（示例：上交所/深交所）"""
-        if TradingDate.is_holiday(self.today()):
+        if TradingDate.is_holiday(cls.today()):
             return False
 
         now = datetime.datetime.now().time()
@@ -55,8 +47,8 @@ class TradingDate():
         return (morning[0] <= now <= morning[1]) or (afternoon[0] <= now <= afternoon[1])
 
     @classmethod
-    def trading_started(self):
-        if TradingDate.is_holiday(self.today()):
+    def trading_started(cls):
+        if TradingDate.is_holiday(cls.today()):
             return False
 
         now = datetime.datetime.now().time()
@@ -64,9 +56,9 @@ class TradingDate():
 
     @classmethod
     @lru_cache(maxsize=1)
-    def get_today_system_date(self):
+    def get_today_system_date(cls):
         url = 'http://www.sse.com.cn/js/common/systemDate_global.js'
-        sse = requests.get(url)
+        sse = Network.session.get(url)
         if sse.status_code == 200:
             if 'var systemDate_global' in sse.text:
                 sys_date = sse.text.partition('var systemDate_global')[2].strip(' =;')
@@ -82,50 +74,58 @@ class TradingDate():
         return None, None, None
 
     @classmethod
-    def is_holiday(self, date):
-        if self.is_trading_date(date):
-            return False
-
-        if date == self.today():
-            sys_date, last_date, tradeday = self.get_today_system_date()
-            return not tradeday
-
-        return True
+    def is_holiday(cls, date):
+        if date in cls.holidays or datetime.datetime.strptime(date, '%Y-%m-%d').weekday() >= 5:
+            return True
+        return False
 
     @classmethod
     @lru_cache(maxsize=10)
-    def prev_trading_date(self, date, ndays=1):
+    def prev_trading_date(cls, date, ndays=1):
         """
         获取指定日期前第N个交易日
         :param date: 基准日期
         :param ndays: 向前偏移的天数（默认1）
         :return: 前第N个交易日日期，如果不存在返回第一天
         """
-        dates = self.trading_dates
-        idx = bisect.bisect_left(dates, date)
-        return self.trading_dates[max(idx - ndays, 0)]
+        d = datetime.datetime.strptime(date, '%Y-%m-%d')
+        while ndays > 0:
+            d -= datetime.timedelta(days=1)
+            if not cls.is_holiday(d.strftime('%Y-%m-%d')):
+                ndays -= 1
+        return d.strftime('%Y-%m-%d')
 
     @classmethod
     @lru_cache(maxsize=10)
-    def next_trading_date(self, date, ndays=1):
+    def next_trading_date(cls, date, ndays=1):
         """
         获取指定日期后第N个交易日
         :param date: 基准日期
         :param ndays: 向后偏移的天数（默认1）
         :return: 后第N个交易日日期，如果不存在返回最后一天
         """
-        idx = bisect.bisect_right(self.trading_dates, date)  # 找到第一个>date的索引
-        return self.trading_dates[min(idx + ndays, len(self.trading_dates)) - 1]
+        d = datetime.datetime.strptime(date, '%Y-%m-%d')
+        while ndays > 0:
+            d += datetime.timedelta(days=1)
+            if not cls.is_holiday(d.strftime('%Y-%m-%d')):
+                ndays -= 1
+        return min(d.strftime('%Y-%m-%d'), cls.max_trading_date())
 
     @classmethod
-    def calc_trading_days(self, bdate, edate):
+    def calc_trading_days(cls, bdate, edate):
         """
         计算两个日期(含)之间的交易日数
         :param bdate: 起始日期
         :param edate: 结束日期
         :return: 交易日数
         """
-        return bisect.bisect_right(self.trading_dates, edate) - bisect.bisect_left(self.trading_dates, bdate)
+        wkdays = 0
+        d = datetime.datetime.strptime(bdate, '%Y-%m-%d')
+        while d <= datetime.datetime.strptime(edate, '%Y-%m-%d'):
+            if cls.is_trading_date(d.strftime('%Y-%m-%d')):
+                wkdays += 1
+            d += datetime.timedelta(days=1)
+        return wkdays
 
     @classmethod
     def clear_cache(cls):
@@ -133,3 +133,30 @@ class TradingDate():
         cls.max_traded_date.cache_clear()
         cls.max_trading_date.cache_clear()
 
+    @classmethod
+    async def load_holidays(cls):
+        holidays = await query_values(MdlHolidays, ['date'])
+        cls.holidays = [d for d, in holidays]
+
+    @classmethod
+    async def update_holiday(cls):
+        if not cls.holidays:
+            await cls.load_holidays()
+        url = 'https://www.tdx.com.cn/url/holiday/'
+        response = Network.session.get(url)
+        response.raise_for_status()
+        response.encoding = 'gbk'
+        soup = BeautifulSoup(response.text, 'html.parser', from_encoding='gbk')
+        txt_data = soup.select_one('textarea#data')
+        txt = txt_data.get_text()
+        holidays = txt.strip().splitlines()
+        cn_holidays = []
+        for hol in holidays:
+            d, n, r, *_ = hol.split('|')
+            d = d[:4] + '-' + d[4:6] + '-' + d[6:]
+            if r == '中国':
+                if d not in cls.holidays:
+                    cn_holidays.append([d, n])
+                    cls.holidays.append(d)
+        if len(cn_holidays) > 0:
+            await insert_many(MdlHolidays, array_to_dict_list(MdlHolidays, cn_holidays))
