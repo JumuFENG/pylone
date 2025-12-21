@@ -183,7 +183,6 @@ class TestStocks(unittest.IsolatedAsyncioTestCase):
     async def test_update_transactions(self):
         await AllStocks.update_stock_transactions()
 
-    @unittest.skip('skip, not all data match')
     @patch('app.stock.manager.TradingDate')
     async def test_convert_transactions_to_kline(self, mock_trading_date):
         code = 'sz001325'

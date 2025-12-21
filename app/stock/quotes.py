@@ -231,13 +231,14 @@ class Quotes:
         return result
 
     @classmethod
-    def _next_bar_time(cls, bar, t, kline_type):
-        def next_bar_hm(h, m):
+    def _bar_time(cls, t, kline_type):
+        def bar_ending_hm(h, m):
             h = int(h)
             m = int(m)
-            if h == 9 and m < 30:
+            if h * 100 + m <= 930:
+                h = 9
                 m = 30 + kline_type
-            else:
+            elif not (h == 11 and m == 30):
                 m = 30 + ((m - 30) // kline_type + 1) * kline_type
 
             if m >= 60:
@@ -246,23 +247,20 @@ class Quotes:
             if h == 11 and m > 30:
                 h = 13
                 m -= 30
+            if h >= 15:
+                # 盘后交易, 并入最后一根K线, 仅适用于创业板科创板
+                h = 15
+                m = 0
             return f'{h:02d}:{m:02d}'
 
         dt = t.split(' ')
         hm = dt[-1]
-        if hm >= "15:00" and bar['time'].endswith("15:00"):
-            # 盘后交易, 并入最后一根K线, 仅适用于创业板科创板
-            return None
 
         if len(dt) == 2:
             dt = dt[0] + ' '
         else:
             dt = ''
-        if not bar or bar['time'].split(' ')[-1] < "09:30":
-            return dt + next_bar_hm(*(hm.split(':')))
-        if t >= bar['time']:
-            return dt + next_bar_hm(*(bar['time'].split(' ')[-1].split(':')))
-        return None
+        return dt + bar_ending_hm(*(hm.split(':')))
 
     @classmethod
     def _transactions_to_klines(cls, transactions: List[List], kline_type: int) -> List[List[Any]]:
@@ -287,21 +285,21 @@ class Quotes:
             else:
                 t, p, v, a, bs = trans
 
-            amount = p * v
-
-            next_t_str = cls._next_bar_time(bar, t, kline_type)
-            if next_t_str:
-                if bar:
-                    parsed.append(bar)
-                if bar or bs != 8:
-                    bar = {'time': next_t_str, 'open': p, 'close': p, 'high': p, 'low': p, 'volume': v, 'amount': amount}
+            if not bar and bs == 8:
                 continue
 
-            bar['high'] = max(bar['high'], p)
-            bar['low'] = min(bar['low'], p)
-            bar['close'] = p
-            bar['volume'] += v
-            bar['amount'] += amount
+            amount = p * v
+            time_str = cls._bar_time(t, kline_type)
+            if bar and bar['time'] == time_str:
+                bar['high'] = max(bar['high'], p)
+                bar['low'] = min(bar['low'], p)
+                bar['close'] = p
+                bar['volume'] += v
+                bar['amount'] += amount
+                continue
+            if bar:
+                parsed.append(bar)
+            bar = {'time': time_str, 'open': p, 'close': p, 'high': p, 'low': p, 'volume': v, 'amount': amount}
 
         if bar:
             parsed.append(bar)

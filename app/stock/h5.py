@@ -342,7 +342,7 @@ class FflowStorage(H5Storage):
             for f in fflow],
             dtype=dtypes
         )
-        cls.save_dataset(code, np.array(values, dtype=cls.saved_dtype))
+        cls.save_dataset(code, values)
 
 
 class TransactionStorage(H5Storage):
