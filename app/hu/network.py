@@ -1,6 +1,7 @@
 import requests
 import time
 import json
+import brotli
 from tenacity import retry, wait_fixed, stop_after_attempt, retry_if_exception_type, wait_exponential
 from . import classproperty
 
@@ -41,6 +42,9 @@ class Network:
         else:
             response = cls.session.get(url, params=params, headers=headers, timeout=timeout)
         response.raise_for_status()
+        if response.headers.get('Content-Encoding') == 'br':
+            decompressed = brotli.decompress(response.content)
+            return decompressed.decode('utf-8')
         return response.text
 
 

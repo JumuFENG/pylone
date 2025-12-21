@@ -14,3 +14,4 @@ ddddocr=1.5.6
 tenacity
 beautifulsoup4
 cachetools
+brotli
