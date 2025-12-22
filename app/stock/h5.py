@@ -4,7 +4,7 @@ import numpy as np
 from typing import Union
 from functools import lru_cache
 from datetime import datetime
-from stockrt.sources.rtbase import rtbase
+import stockrt as srt
 from app.lofig import Config, logger
 from app.hu import classproperty, FixedPointConverter
 
@@ -183,8 +183,8 @@ class H5Storage:
             return klines
 
     @classmethod
-    def max_date(cls, fcode: str, kline_type: int=101):
-        """获取最大日期"""
+    def _min_max_date(cls, max_or_min: bool, fcode: str,  kline_type: int=101):
+        """获取最大/最小日期"""
         file_path = cls.h5_saved_path(fcode, kline_type)
         if not os.path.isfile(file_path):
             return ''
@@ -195,10 +195,21 @@ class H5Storage:
             dset = f[group][fcode]
             if len(dset) == 0:
                 return ''
-            last_time_str = cls.date_converter.int_to_time(np.array([dset[-1]['time']]))[0]
+            idx = -1 if max_or_min else 0
+            fl_time_str = cls.date_converter.int_to_time(np.array([dset[idx]['time']]))[0]
             if kline_type > 100 and kline_type % 15 != 0:
-                last_time_str = last_time_str.split(' ')[0]
-            return last_time_str
+                fl_time_str = fl_time_str.split(' ')[0]
+            return fl_time_str
+
+    @classmethod
+    def max_date(cls, fcode: str, kline_type: int=101):
+        """获取最大/最小日期"""
+        return cls._min_max_date(True, fcode, kline_type)
+        
+    @classmethod
+    def min_date(cls, fcode: str, kline_type: int=101):
+        """获取最小日期"""
+        return cls._min_max_date(False, fcode, kline_type)
 
     @classmethod
     def delete_dataset(cls, fcode: str, kline_type: int=101):
@@ -282,7 +293,7 @@ class KLineStorage(H5Storage):
 
     @classmethod
     def read_kline_data(cls, fcode: str, kline_type: Union[int, str]=101, length: int=0):
-        kline_type = rtbase.to_int_kltype(kline_type)
+        kline_type = srt.to_int_kltype(kline_type)
         if kline_type not in cls.saved_kline_types:
             if kline_type % 15 == 0:
                 saved_klines = cls.read_saved_data(fcode, length*kline_type/15, 15)

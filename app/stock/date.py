@@ -26,9 +26,16 @@ class TradingDate():
     @lru_cache(maxsize=1)
     def max_traded_date(cls):
         return kls.max_date('sh000001')
+    
+    @classmethod
+    @lru_cache(maxsize=1)
+    def min_traded_date(cls):
+        return kls.min_date('sh000001')
 
     @classmethod
     def is_trading_date(cls, date):
+        if not date or date < cls.min_traded_date():
+            return False
         if date == cls.max_trading_date():
             return True
         return date not in cls.holidays and datetime.datetime.strptime(date, '%Y-%m-%d').weekday() < 5
@@ -88,6 +95,8 @@ class TradingDate():
         :param ndays: 向前偏移的天数（默认1）
         :return: 前第N个交易日日期，如果不存在返回第一天
         """
+        if date <= cls.min_traded_date():
+            return cls.min_traded_date()
         d = datetime.datetime.strptime(date, '%Y-%m-%d')
         while ndays > 0:
             d -= datetime.timedelta(days=1)
@@ -104,6 +113,8 @@ class TradingDate():
         :param ndays: 向后偏移的天数（默认1）
         :return: 后第N个交易日日期，如果不存在返回最后一天
         """
+        if date < cls.min_traded_date():
+            return cls.min_traded_date()
         d = datetime.datetime.strptime(date, '%Y-%m-%d')
         while ndays > 0:
             d += datetime.timedelta(days=1)
@@ -120,6 +131,10 @@ class TradingDate():
         :return: 交易日数
         """
         wkdays = 0
+        if ' ' in bdate:
+            bdate = bdate.split(' ')[0]
+        if ' ' in edate:
+            edate = edate.split(' ')[0]
         d = datetime.datetime.strptime(bdate, '%Y-%m-%d')
         while d <= datetime.datetime.strptime(edate, '%Y-%m-%d'):
             if cls.is_trading_date(d.strftime('%Y-%m-%d')):

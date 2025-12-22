@@ -927,13 +927,18 @@ class UserStockManager():
         return {s[0]: {'holdCost':s[1], 'holdCount': s[2], 'strategies': await self.load_strategy(user, s[0])} for s in slst}
 
     @classmethod
+    async def watching_stocks(self, user: User):
+        slst = await query_values(UserStocks, ['code', 'aver_price', 'portion_hold'], UserStocks.user_id == user.id, UserStocks.keep_eye == 1)
+        return [s[0] for s in slst]
+
+    @classmethod
     async def forget_stock(cls, user: User, code: str):
         await upsert_one(UserStocks, {'user_id': user.id, 'code': code, 'amount': 0, 'uramount': '', 'keep_eye': 0}, ['user_id', 'code'])
         await cls.remove_strategy(user, code)
 
     @classmethod
     async def forget_stocks(cls, user):
-        p0rec = await query_values(UserStocks, ['code'], UserStocks.user_id == user.id, UserStocks.keep_eye == 1)
+        p0rec = await query_values(UserStocks, ['code'], UserStocks.user_id == user.id, UserStocks.portion_hold == 0, UserStocks.keep_eye == 1)
         if len(p0rec) == 0:
             return
         p0rec = [{'user_id': user.id, 'code': r, 'keep_eye': 0} for r, in p0rec]

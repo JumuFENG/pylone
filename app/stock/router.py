@@ -7,8 +7,8 @@ from app.users.manager import (
 from app.admin.system_settings import SystemSettings
 from .date import TradingDate
 from .manager import AllStocks, AllBlocks, StockMarketStats
-from .history import rtbase, StockDtMap, Khistory as khis
-from .quotes import Quotes as qot
+from .history import StockDtMap, Khistory as khis
+from .quotes import Quotes as qot, srt
 from .schemas import PmStock
 
 
@@ -74,7 +74,7 @@ async def stock_post(
             usm.remove_user_stock_with_deals(user, data)
         elif act == 'strategy':
             if len(code) != 8:
-                code = rtbase.get_fullcode(code)
+                code = srt.get_fullcode(code)
             if data is None or len(data) == 0:
                 await usm.remove_strategy(user, code)
             else:
@@ -86,7 +86,7 @@ async def stock_post(
 async def get_all_stock_info():
     return await AllStocks.read_all()
 
-@router.get("/kline")
+@router.get("/klines")
 async def stock_kline(
     code: str = Query(..., min_length=6),
     kltype: str = Query(...),
@@ -99,8 +99,12 @@ async def stock_kline(
 
         result = {}
         codes_unfinished = []
+        codes_unsaved = []
         for c in code:
             data = await khis.read_kline(c, kltype, 0, length, start)
+            if data is None:
+                codes_unsaved.append(c)
+                continue
             result[c] = data.tolist()
             if result[c][-1][0] < TradingDate.max_trading_date():
                 codes_unfinished.append(c)
@@ -116,6 +120,25 @@ async def stock_kline(
                     result[c].extend(kl)
                     if fqt > 0:
                         result[c] = await khis.fix_price(c, result[c], fqt)
+        if len(codes_unsaved) > 0:
+            result.update(srt.klines(codes_unsaved, kltype, length, fqt))
         return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/quotes")
+def stock_quotes(code: str = Query(..., min_length=6)):
+    try:
+        code = qot._normalize_codes(code)
+        return qot.get_quotes(code)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/tlines")
+def stock_tlines(code: str = Query(..., min_length=6)):
+    try:
+        code = qot._normalize_codes(code)
+        return qot.get_tlines(code)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

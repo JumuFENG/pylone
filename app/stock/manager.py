@@ -8,9 +8,10 @@ from datetime import datetime
 import stockrt as srt
 from stockrt.sources.eastmoney import Em
 from emxg import search_emxg
-from app.hu import classproperty, to_cls_secucode
+from app.hu import classproperty, to_cls_secucode, time_stamp
+from app.hu.network import Network as net
 from app.lofig import logger
-from app.db import upsert_one, upsert_many, query_one_value, query_aggregate, query_values, delete_records
+from app.db import upsert_one, upsert_many, query_one_value, query_one_record, query_aggregate, query_values, delete_records
 from .models import MdlAllStock, MdlStockBk, MdlStockBkMap, MdlSMStats
 from .schemas import PmStock
 from .history import (
@@ -186,17 +187,20 @@ class AllStocks:
     async def update_stock_transactions(cls):
         rows = await query_values(cls.db)
         stocks = [r.code for r in rows if r.code.startswith(('sh', 'sz', 'bj')) and r.typekind in ('ABStock', 'BJStock')]
-        # TODO: Check max date
+        stocks = [s for s in stocks if sts.max_date(s) < TradingDate.max_trading_date()]
         trans = qot.get_transactions(stocks)
         for k, v in trans.items():
+            if not v:
+                logger.warning(f'no transactions for {k}')
+                continue
             cols = ['time', 'price', 'volume', 'num', 'bs'] if len(v[0]) == 5 else ['time', 'price', 'volume', 'bs']
             nptrans = np.array([tuple(v_) for v_ in v], [(c, sts.restore_dtype.get(c, 'float64')) for c in cols])
             sts.save_dataset(k, nptrans)
 
     @classmethod
     async def is_quited(cls, code):
-        quit_date = await query_one_value(cls.db, 'quit_date', cls.db.code == srt.get_fullcode(code))
-        return quit_date is not None
+        srec = await query_one_record(cls.db, cls.db.code == srt.get_fullcode(code))
+        return srec.typekind == 'TSStock' or srec.quit_date
 
     @classmethod
     async def load_new_stocks(cls, sdate=None):
@@ -275,6 +279,20 @@ class AllStocks:
         funds.extend(get_stocks(['MK0021', 'MK0022', 'MK0023', 'MK0024'], 'ETF'))
         funds.extend(get_stocks(['MK0404', 'MK0405', 'MK0406', 'MK0407'], 'LOF'))
         await upsert_many(cls.db, funds, ['code'])
+
+    @classmethod
+    async def check_stock_quit(cls, codes):
+        # https://xueqiu.com/query/v1/suggest_stock.json?q=SZ000046&count=5
+        # https://q.stock.sohu.com/suggest/search/all?type=all&count=10&terminal=pc&callback=&keyword=
+        for code in codes:
+            url = f'https://q.stock.sohu.com/suggest/search/all?type=all&count=10&terminal=pc&callback=&keyword={code[-6:]}&_={time_stamp()}'
+            response = net.fetch_url(url)
+            data = json.loads(response)
+            if data and data['code'] == 200 and 'data' in data:
+                for s in data['data']:
+                    if s['typeId'] == '001001' and s['id'] == f'cn_{code[-6:]}' and s['status'] == 'D':
+                        logger.info('%s %s quit', code, s['name'])
+                        await upsert_one(cls.db, {'code': code, 'name': s['name'], 'typekind': 'TSStock'}, ['code'])
 
     @classmethod
     async def update_purelost4up(cls):
@@ -356,12 +374,16 @@ class AllBlocks:
 
     @classmethod
     async def bk_stocks(self, bks, union=True):
-        stocks = await query_values(MdlStockBkMap, MdlStockBkMap.stock, MdlStockBkMap.bk._in(bks) if union else MdlStockBkMap.bk.all_(bks))
+        if isinstance(bks, str):
+            bks = [bks]
+        stocks = await query_values(MdlStockBkMap, MdlStockBkMap.stock, MdlStockBkMap.bk.in_(bks) if union else MdlStockBkMap.bk.all_(bks))
         return [s for s, in stocks]
 
     @classmethod
     async def stock_bks(self, codes, union=True):
-        bks = await query_values(MdlStockBkMap, MdlStockBkMap.bk, MdlStockBkMap.stock._in(codes) if union else MdlStockBkMap.stock.all_(codes))
+        if isinstance(codes, str):
+            codes = [codes]
+        bks = await query_values(MdlStockBkMap, MdlStockBkMap.bk, MdlStockBkMap.stock.in_(codes) if union else MdlStockBkMap.stock.all_(codes))
         return [s for s, in bks]
 
 

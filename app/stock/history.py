@@ -8,7 +8,7 @@ from bs4 import BeautifulSoup
 from traceback import format_exc
 from typing import Optional, List, Any
 from numpy.lib.recfunctions import append_fields
-from stockrt.sources.rtbase import rtbase
+import stockrt as srt
 from app.lofig import logger
 from app.hu import classproperty, time_stamp
 from app.hu.network import Network, EmRequest, EmDataCenterRequest
@@ -64,11 +64,11 @@ class Khistory:
 
     @classmethod
     def max_date(cls, code, kltype='d'):
-        return kls.max_date(rtbase.get_fullcode(code), rtbase.to_int_kltype(kltype))
+        return kls.max_date(srt.get_fullcode(code), srt.to_int_kltype(kltype))
 
     @classmethod
     def count_bars_to_updated(cls, code, kltype=101):
-        if rtbase.to_int_kltype(kltype) not in kls.saved_kline_types:
+        if srt.to_int_kltype(kltype) not in kls.saved_kline_types:
             return 0
         guessed = cls.guess_bars_since(cls.max_date(code, kltype), kltype)
         return guessed if guessed == sys.maxsize else max(guessed, 0)
@@ -76,7 +76,7 @@ class Khistory:
     @classmethod
     async def read_kline(cls, code, kline_type, fqt=0, length=None, start=None):
         """从HDF5文件中读取K线数据"""
-        klt = rtbase.to_int_kltype(kline_type)
+        klt = srt.to_int_kltype(kline_type)
         if start is not None:
             length = cls.guess_bars_since(start, klt)
             if length == sys.maxsize:
@@ -86,7 +86,7 @@ class Khistory:
         def_len = kls.default_kline_cache_size(klt)
         if length is None:
             length = def_len
-        code = rtbase.get_fullcode(code)
+        code = srt.get_fullcode(code)
         kldata = kls.read_kline_data(code, klt, max(length, def_len))
         if kldata is None:
             return None
@@ -311,7 +311,7 @@ class Khistory:
     @classmethod
     def save_kline(cls, code: str, kline_type: str|int, kldata: np.ndarray):
         """保存K线数据到HDF5文件"""
-        klt = rtbase.to_int_kltype(kline_type)
+        klt = srt.to_int_kltype(kline_type)
         if klt not in kls.saved_kline_types:
             logger.error(f'kline_type {klt} not in saved_kline_types')
             return False
@@ -477,7 +477,7 @@ class FundShareBonus(StockShareBonus):
         super().__init__()
 
     def setCode(self, code):
-        self.code = rtbase.get_fullcode(code)
+        self.code = srt.get_fullcode(code)
         self.bnData = []
 
     def getUrl(self):
@@ -598,7 +598,10 @@ class StockBaseSelector():
         await self.post_process()
 
     async def update_pickups(self):
-        mdate = await query_aggregate('max', self.db, 'time')
+        if getattr(self.db, 'time', None) is not None:
+            mdate = await query_aggregate('max', self.db, 'time')
+        else:
+            mdate = await query_aggregate('max', self.db, 'date')
         if mdate == TradingDate.max_trading_date():
             logger.info('%s update_pickups already updated to latest!', self.__class__.__name__)
             return
@@ -648,7 +651,7 @@ class FflowRequest(EmRequest):
         return f'''https://push2his.eastmoney.com/api/qt/stock/fflow/daykline/get?lmt=0&klt=101&fields1=f1,f2,f3,f7&fields2=f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61,f62,f63,f64,f65&ut=b2884a393a59ad64002292a3e90d46a5&secid={emsec}&_={time_stamp()}'''
 
     def setCode(self, code):
-        self.code = rtbase.get_fullcode(code)
+        self.code = srt.get_fullcode(code)
         self.page = 1
 
     async def getNext(self, headers=None):
@@ -785,7 +788,7 @@ class StockChanges(EmRequest):
 
         for chg in changes:
             code = chg['c']
-            code = rtbase.get_fullcode(code)
+            code = srt.get_fullcode(code)
             tm = str(chg['tm']).rjust(6, '0')
             ftm = f'{self.date} {tm[0:2]}:{tm[2:4]}:{tm[4:6]}'
             tp = chg['t']
@@ -1217,7 +1220,7 @@ class StockZtInfo10jqka(EmRequest):
             for ztobj in jqkback['data']['info']:
                 mt = ztobj['market_type']
                 code = ztobj['code']
-                code = rtbase.get_fullcode(code) # code
+                code = srt.get_fullcode(code) # code
                 hsl = ztobj['turnover_rate'] / 100 # 换手率 %
                 fund = ztobj['order_amount'] # 封单金额
                 zbc = 0 if ztobj['open_num'] is None else ztobj['open_num'] # 炸板次数
@@ -1283,7 +1286,7 @@ class StockZtInfo(EmRequest):
         ztdata = []
         date = qdate[0:4] + '-' + qdate[4:6] + '-' + qdate[6:8]
         for ztobj in emback['data']['pool']:
-            code = rtbase.get_fullcode(ztobj['c']) # code
+            code = srt.get_fullcode(ztobj['c']) # code
             hsl = ztobj['hs']/100 # 换手率 %
             fund = ztobj['fund'] # 封单金额
             zbc = ztobj['zbc'] # 炸板次数
@@ -1344,7 +1347,7 @@ class StockZtDaily(StockBaseSelector):
         for i, w in enumerate(self.wkstocks):
             sdate = await query_aggregate('max', self.db, 'time', MdlDayZtStocks.code == w[0], MdlDayZtStocks.lbc == 1)
             if sdate is None or sdate == 0:
-                sdate = '0'
+                sdate = ''
             else:
                 sdate = TradingDate.prev_trading_date(sdate)
             self.wkstocks[i].append(sdate)
@@ -1597,7 +1600,7 @@ class StockDtInfo(EmRequest):
 
             date = qdate[0:4] + '-' + qdate[4:6] + '-' + qdate[6:8]
             for dtobj in emback['data']['pool']:
-                code = rtbase.get_fullcode(dtobj['c']) # code
+                code = srt.get_fullcode(dtobj['c']) # code
                 hsl = dtobj['hs'] / 100 # 换手率 %
                 fund = dtobj['fund'] # 封单金额
                 fba = dtobj['fba'] # 板上成交额

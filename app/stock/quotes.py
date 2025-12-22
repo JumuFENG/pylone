@@ -7,7 +7,6 @@ from traceback import format_exc
 from typing import Union, List, Dict, Any, Optional
 from bisect import bisect_left
 import stockrt as srt
-from stockrt.sources.rtbase import rtbase
 from app.lofig import logger
 from app.hu import classproperty, time_stamp
 from app.hu.network import Network
@@ -112,7 +111,7 @@ class Quotes:
         """
         try:
             normalized_codes = cls._normalize_codes(codes)
-            klt = rtbase.to_int_kltype(kline_type)
+            klt = srt.to_int_kltype(kline_type)
 
             # 特殊处理实时K线
             if klt == 101:
@@ -305,3 +304,45 @@ class Quotes:
             parsed.append(bar)
 
         return [[t['time'], t['open'], t['close'], t['high'], t['low'], t['volume'], t['amount']] for t in parsed]
+
+    @classmethod
+    def get_tlines(cls, codes: Union[str, List[str]]) -> List[List[Any]]:
+        trans = cls.get_transactions(codes)
+        result = {}
+        for c, v in trans.items():
+            result[c] = cls._transactions_to_tlines(v)
+        return result
+
+    @classmethod
+    def _transactions_to_tlines(cls, transactions: List[List]) -> List[List[Any]]:
+        if not transactions:
+            return []
+
+        parsed: List[dict] = []
+        bar = {}
+        for trans in transactions:
+            if len(trans) == 4:
+                t, p, v, bs = trans
+            else:
+                t, p, v, a, bs = trans
+
+            if not bar and bs == 8:
+                continue
+
+            amount = p * v
+            time_str = cls._bar_time(t, 1)
+            if bar and bar['time'] == time_str:
+                bar['price'] = p
+                bar['volume'] += v
+                bar['amount'] += amount
+                continue
+            if bar:
+                bar['avg_price'] = parsed[-1]['avg_price'] if bar['volume'] == 0 else bar['amount'] / bar['volume']
+                parsed.append(bar)
+            bar = {'time': time_str, 'price': p, 'volume': v, 'amount': amount}
+
+        if bar:
+            bar['avg_price'] = parsed[-1]['avg_price'] if bar['volume'] == 0 else bar['amount'] / bar['volume']
+            parsed.append(bar)
+
+        return [[t['time'], t['price'], t['volume'], t['amount'], t['avg_price']] for t in parsed]
