@@ -8,6 +8,7 @@ from app.lofig import Config
 from app.db import cfg, engine, Base
 from app.users.models import User
 from app.stock.models import MdlStockShare
+from app.selectors import *
 from app.users.schemas import UserCreate
 from app.users.manager import get_user_db, UserManager
 
@@ -79,7 +80,7 @@ async def create_single_table(table_name):
 async def main():
     await check_database()
 
-    for table_name in ['holidays']:
+    for table_name in ['stock_dt3_pickup']:
         await create_single_table(table_name)
 
     # async with engine.begin() as conn:
