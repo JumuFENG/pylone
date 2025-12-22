@@ -1,6 +1,7 @@
 import asyncio
 import sys
 import os
+from sqlalchemy import inspect
 
 # 添加项目路径
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -73,9 +74,20 @@ async def create_admin():
             print(f"管理员用户 '{admin_data['username']}' 创建成功")
         break
 
+
 async def create_single_table(table_name):
     async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.tables[table_name].create)
+        table = Base.metadata.tables.get(table_name)
+        if table is None:
+            print(f"表 '{table_name}' 在元数据中未找到，跳过")
+            return
+
+        exists = await conn.run_sync(lambda sync_conn: inspect(sync_conn).has_table(table.name))
+        if exists:
+            print(f"表 '{table_name}' 已存在，跳过创建")
+            return
+
+        await conn.run_sync(lambda sync_conn: table.create(bind=sync_conn))
 
 async def main():
     await check_database()
@@ -88,7 +100,7 @@ async def main():
 
     await create_admin()
 
-    await engine.dispose()
 
 if __name__ == '__main__':
-    asyncio.run(main())
+    loop = asyncio.get_event_loop()
+    loop.run_until_complete(main())

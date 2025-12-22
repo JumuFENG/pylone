@@ -1,0 +1,17 @@
+services:
+  pylone:
+    image: pylone:latest
+    container_name: pylone
+    environment:
+      - TZ=Asia/Shanghai
+    volumes:
+      - /Users/chuazhou/dev/log-viewer/logs:/home/pyuser/pylone/logs
+      - /Users/chuazhou/dev/pylone/config/config_dkr.json:/home/pyuser/pylone/config/config.json
+      - /Users/chuazhou/dev/pylone/data:/home/pyuser/pylone/data
+      - /Users/chuazhou/dev/pylone/app:/home/pyuser/pylone/app
+      - /Users/chuazhou/dev/pylone/html:/home/pyuser/pylone/html
+      - /Users/chuazhou/dev/pylone/main.py:/home/pyuser/pylone/main.py
+    ports:
+      - "9111:9111"
+    restart: unless-stopped
+

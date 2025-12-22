@@ -10,7 +10,7 @@ pydantic[email]
 jinja2
 aiofiles
 requests
-ddddocr=1.5.6
+ddddocr==1.5.6
 tenacity
 beautifulsoup4
 cachetools
