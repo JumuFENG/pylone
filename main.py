@@ -3,7 +3,7 @@ from fastapi import FastAPI, Request, Depends
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from fastapi.responses import RedirectResponse
-from app.lofig import Config, logger
+from app.lofig import Config, logger, redirect_std_logs
 from app.users.router import router as users_router
 from app.admin.router import router as admin_router
 from app.stock.router import router as stock_router

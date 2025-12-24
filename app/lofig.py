@@ -45,7 +45,7 @@ class Config:
     @classmethod
     @lru_cache(maxsize=1)
     def _lg_path(cls):
-        lgpath = os.path.join(os.path.dirname(__file__), f'../logs/{cls.app_name}.log')
+        lgpath = os.path.join(os.path.dirname(__file__), f'../logs/{cls.all_configs().get("app_name", "pyswee")}.log')
         if not os.path.isdir(os.path.dirname(lgpath)):
             os.mkdir(os.path.dirname(lgpath))
         return lgpath
@@ -126,3 +126,25 @@ logging.basicConfig(
 )
 
 logger : logging.Logger = logging.getLogger(Config.app_name)
+
+def redirect_std_logs():
+    class StdoutLogger:
+        def write(self, msg):
+            msg = msg.strip()
+            if msg != '':
+                logger.info(msg)
+
+        def flush(self):
+            pass
+
+    class StderrLogger:
+        def write(self, msg):
+            msg = msg.strip()
+            if msg != '':
+                logger.error(msg)
+
+        def flush(self):
+            pass
+
+    sys.stdout = StdoutLogger()
+    sys.stderr = StderrLogger()
