@@ -311,6 +311,8 @@ class Khistory:
     @classmethod
     def save_kline(cls, code: str, kline_type: str|int, kldata: np.ndarray):
         """保存K线数据到HDF5文件"""
+        if len(kldata) == 0:
+            return False
         klt = srt.to_int_kltype(kline_type)
         if klt not in kls.saved_kline_types:
             logger.error(f'kline_type {klt} not in saved_kline_types')
@@ -660,7 +662,6 @@ class FflowRequest(EmRequest):
         rsp = self.getRequest(headers)
         fflow = json.loads(rsp)
         if fflow is None or 'data' not in fflow or fflow['data'] is None or 'klines' not in fflow['data']:
-            logger.warning(rsp.url)
             logger.warning(fflow)
             return
 
@@ -723,7 +724,7 @@ class StockBkMap(EmRequest):
         bkstks = json.loads(self.getRequest(self.headers))
         if 'data' in bkstks and 'stocks' in bkstks['data']:
             for stk in bkstks['data']['stocks']:
-                code = ''.join(reversed(stk['secu_code'].split('.'))).upper()
+                code = ''.join(reversed(stk['secu_code'].split('.')))
                 self.bkstocks.append(code)
         return self.bkstocks
 
@@ -734,7 +735,7 @@ class StockBkMap(EmRequest):
         allstocks = [s for s, in allstocks]
         self.bkstocks = list(filter(lambda x: x in allstocks, self.bkstocks))
         if len(exstocks) == 0:
-            await insert_many(MdlStockBkMap, [MdlStockBkMap(bk=self.bk, stock=s) for s in self.bkstocks])
+            await insert_many(MdlStockBkMap, [{"bk":self.bk, "stock":s} for s in self.bkstocks])
             self.bkstocks = []
             return
 
@@ -744,7 +745,7 @@ class StockBkMap(EmRequest):
             await delete_records(MdlStockBkMap, MdlStockBkMap.bk == self.bk, MdlStockBkMap.stock.in_(ex))
 
         if len(new) > 0:
-            await insert_many(MdlStockBkMap, [MdlStockBkMap(bk=self.bk, stock=s) for s in new])
+            await insert_many(MdlStockBkMap, [{"bk":self.bk, "stock":s} for s in new])
 
         self.bkstocks = []
 
@@ -1546,14 +1547,23 @@ class StockZtConcepts():
                     else:
                         cdict[k] += 1
             for k,v in cdict.items():
-                ztconceptsdata.append([date, k, v])
+                if v > 1:
+                    ztconceptsdata.append([date, k, v])
 
             ndate = TradingDate.next_trading_date(date)
             if ndate == date:
                 break
             date = ndate
 
-        await insert_many(self.db, array_to_dict_list(self.db, ztconceptsdata), ['time', 'cpt'])
+        unique_cols = []
+        unique_data = []
+        for d, c, v in ztconceptsdata:
+            if (d, c.lower()) not in unique_cols:
+                unique_cols.append((d, c.lower()))
+                unique_data.append([d, c, v])
+        if not unique_data:
+            return
+        await insert_many(self.db, array_to_dict_list(self.db, unique_data), ['time', 'cpt'])
 
 
 class StockDtInfo(EmRequest):

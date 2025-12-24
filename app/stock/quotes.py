@@ -163,7 +163,7 @@ class Quotes:
             if kline_type < 100 or kline_type % 15 == 0:
                 new_klines = cls.klines_from_transactions(uncached_codes, kline_type)
             else:
-                new_klines = srt.klines(uncached_codes, kline_type)
+                new_klines = srt.klines(uncached_codes, kline_type, fq=0)
             today = TradingDate.today()
             for c, v in new_klines.items():
                 new_klines[c] = [kl for kl in v if kl[0] >= today]
@@ -204,7 +204,7 @@ class Quotes:
     @classmethod
     def _pick_cached_transactions(cls, codes: List[str]) -> Dict[str, Any]:
         cache = get_async_lru_cache()
-        return {c: cache[f'trans_{c}'] for c in codes}
+        return {c: cache[f'trans_{c}'] for c in codes if cache.get(f'trans_{c}')}
 
     @classmethod
     def _cache_transactions(cls, transactions: Dict[str, Any]):
@@ -231,7 +231,7 @@ class Quotes:
 
     @classmethod
     def _bar_time(cls, t, kline_type):
-        def bar_ending_hm(h, m):
+        def bar_ending_hm(h, m, s=0):
             h = int(h)
             m = int(m)
             if h * 100 + m <= 930:

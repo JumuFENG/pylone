@@ -71,14 +71,15 @@ class AllStocks:
         '''
         rows = await query_values(cls.db)
         target_types = ['Index', 'ETF', 'LOF', 'ABStock', 'BJStock', 'TSStock']
+        mxdate = TradingDate.max_trading_date()
         if sectype in target_types:
-            target_code = [row.code for row in rows if row.typekind == sectype]
+            target_code = [row.code for row in rows if row.typekind == sectype and (row.setup_date is None or row.setup_date <= mxdate)]
         else:
             if kltype == 'd':
-                stock_cns = {r.code: r.name for r in rows if r.code.startswith(('sh', 'sz', 'bj')) and r.typekind in ('ABStock', 'BJStock')}
+                stock_cns = {r.code: r.name for r in rows if r.code.startswith(('sh', 'sz', 'bj')) and r.typekind in ('ABStock', 'BJStock') and (r.setup_date is None or r.setup_date <= mxdate)}
                 target_code = await cls.update_stock_daily_kline_and_fflow(stock_cns)
             else:
-                target_code = [row.code for row in rows if row.typekind == 'ABStock' or row.typekind == 'BJStock']
+                target_code = [row.code for row in rows if row.typekind in ('ABStock', 'BJStock') and (row.setup_date is None or row.setup_date <= mxdate)]
 
         if not target_code:
             return
@@ -134,20 +135,18 @@ class AllStocks:
 
         :return: 有最新价但是与数据库中保存的数据不连续的股票列表，需单独获取股票K线
         '''
-        # TODO: Testing, remove later
-        is_test = True
-        if is_test:
-            logger.warning('testing, skip!')
-            return cns.keys()
         sina = srt.rtsource('sina')
         stock_list = sina.stock_list()
         if 'all' not in stock_list:
             return
 
         stock_list = stock_list['all']
+        stock_list_bj = sina.stock_list('bjs')
+        if 'bjs' in stock_list_bj:
+            stock_list.extend(stock_list_bj['bjs'])
         result = {}
         for stock in stock_list:
-            c = stock['code'][-6:]
+            c = stock['code']
             result[c] = {** stock}
             if 'time' not in stock:
                 result[c]['time'] = TradingDate.max_trading_date()
@@ -180,14 +179,20 @@ class AllStocks:
     async def update_stock_fflow(cls):
         rows = await query_values(cls.db)
         for r in rows:
-            if r.code.startswith(('sh', 'sz', 'bj')) and r.typekind in ('ABStock', 'BJStock'):
+            if r.code.startswith(('sh', 'sz', 'bj')) and r.typekind in ('ABStock', 'BJStock') and (r.setup_date is None or r.setup_date <= TradingDate.max_trading_date()):
                 await fhis.update_fflow(r.code)
 
     @classmethod
     async def update_stock_transactions(cls):
+        if TradingDate.today() != TradingDate.max_trading_date():
+            logger.warning(f'transactions should updated on the same day of trading day!')
+            return
         rows = await query_values(cls.db)
-        stocks = [r.code for r in rows if r.code.startswith(('sh', 'sz', 'bj')) and r.typekind in ('ABStock', 'BJStock')]
+        stocks = [r.code for r in rows if r.code.startswith(('sh', 'sz', 'bj')) and r.typekind in ('ABStock', 'BJStock') and (r.setup_date is None or r.setup_date <= TradingDate.max_trading_date())]
         stocks = [s for s in stocks if sts.max_date(s) < TradingDate.max_trading_date()]
+        if not stocks:
+            logger.info('no stocks need to update transactions')
+            return
         trans = qot.get_transactions(stocks)
         for k, v in trans.items():
             if not v:

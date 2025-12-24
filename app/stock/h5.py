@@ -22,7 +22,7 @@ class TimeConverter:
             date_strs = np.array([date_strs])
         date_strs = np.where(np.char.str_len(date_strs) == 10, np.char.add(date_strs, ' 00:00:00'), date_strs)
         date_strs = np.where(np.char.str_len(date_strs) == 16, np.char.add(date_strs, ':00'), date_strs)
-        fmt = self.time_fmt if '%S' in self.time_fmt else self.time_fmt + ':00'
+        fmt = self.time_fmt if '%S' in self.time_fmt else self.time_fmt + ':%S'
         dt = np.vectorize(lambda s: int(datetime.strptime(s, fmt).strftime('%Y%m%d%H%M%S')))
         return dt(date_strs)
 
