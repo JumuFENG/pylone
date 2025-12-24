@@ -8,7 +8,6 @@ from .manager import (
     bearer_auth_backend,
     current_superuser,
     get_user_manager,
-    get_user_db,
     get_current_user_basic
 )
 from .schemas import UserRead, UserCreate, UserUpdate
@@ -65,14 +64,13 @@ async def update_user_protected(
             detail="无权修改其他用户信息"
         )
 
-    async for user_db in get_user_db():
-        async for user_manager in get_user_manager():
-            user = await user_db.get(user_id)
-            if not user:
-                raise HTTPException(status_code=404, detail="用户不存在")
+    async for user_manager in get_user_manager():
+        user = await user_manager.user_db.get(user_id)
+        if not user:
+            raise HTTPException(status_code=404, detail="用户不存在")
 
-            updated_user = await user_manager.update(user_update, user, safe=False, request=None)
-            return updated_user
+        updated_user = await user_manager.update(user_update, user, safe=False, request=None)
+        return updated_user
 
 
 @router.delete("/users/{user_id}", status_code=204, tags=["users"])
@@ -87,14 +85,13 @@ async def delete_user_protected(
             detail="无法删除超级管理员账户"
         )
 
-    async for user_db in get_user_db():
-        async for user_manager in get_user_manager():
-            user = await user_db.get(user_id)
-            if not user:
-                raise HTTPException(status_code=404, detail="用户不存在")
+    async for user_manager in get_user_manager():
+        user = await user_manager.user_db.get(user_id)
+        if not user:
+            raise HTTPException(status_code=404, detail="用户不存在")
 
-            await user_manager.delete(user, request=None)
-            return
+        await user_manager.delete(user, request=None)
+        return
 
 @router.get("/users/subaccounts", response_model=List[UserRead], tags=["users"])
 async def get_subaccounts(user=Depends(fastapi_users.current_user(active=True))):
