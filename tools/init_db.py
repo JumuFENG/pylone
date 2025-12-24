@@ -84,8 +84,9 @@ async def create_single_table(table_name):
 
         exists = await conn.run_sync(lambda sync_conn: inspect(sync_conn).has_table(table.name))
         if exists:
-            print(f"表 '{table_name}' 已存在，跳过创建")
-            return
+            await conn.run_sync(lambda sync_conn: table.drop(bind=sync_conn))
+            # print(f"表 '{table_name}' 已存在，跳过创建")
+            # return
 
         await conn.run_sync(lambda sync_conn: table.create(bind=sync_conn))
 

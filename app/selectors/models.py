@@ -9,7 +9,7 @@ class MdlDt3(Base):
     date = Column(String(20), nullable=False)
     date3 = Column(String(20), nullable=True)
     date4 = Column(String(20), nullable=True)
-    buy = Column(SmallInteger, nullable=False)
+    buy = Column(SmallInteger, nullable=True)
 
     __table_args__ = (
         PrimaryKeyConstraint('code', 'date', name='pk_dt3'),

@@ -61,6 +61,8 @@ def transform_rows(rows: List[Tuple], unique_keys: List[int], transform_func: Op
     for r in rows:
         # 应用转换函数（如果提供）
         transformed_row = transform_func(r) if transform_func else r
+        if not transformed_row:
+            continue
 
         # 构建唯一键
         key = tuple(transformed_row[i] for i in unique_keys)
@@ -76,7 +78,8 @@ async def migrate_table(
     conn,
     from_dbname: str,
     to_dbname: str,
-    table_name: str,
+    from_table_name: str,
+    to_table_name: str,
     columns_mapping: Dict[str, str],
     unique_keys: List[int],
     transform_func: Optional[Callable] = None
@@ -88,7 +91,8 @@ async def migrate_table(
         conn: 数据库连接
         from_dbname: 源数据库名
         to_dbname: 目标数据库名
-        table_name: 表名
+        from_table_name: 表名
+        to_table_name: 目标表名
         columns_mapping: 列映射字典，格式为 {目标列名: 源列名}
         unique_keys: 用于去重的字段索引列表
         transform_func: 可选的行转换函数
@@ -100,32 +104,86 @@ async def migrate_table(
             return
 
         # 查询源数据
-        source_columns = ', '.join(columns_mapping.values())
-        await cursor.execute(f"SELECT {source_columns} FROM `{from_dbname}`.`{table_name}`")
+        source_columns = ', '.join([c for c in columns_mapping.values() if c])
+        await cursor.execute(f"SELECT {source_columns} FROM `{from_dbname}`.`{from_table_name}`")
         rows = await cursor.fetchall()
 
         if not rows:
-            print(f"源表 '{table_name}' 中没有数据可迁移。")
+            print(f"源表 '{from_table_name}' 中没有数据可迁移。")
             return
 
         # 转换和去重数据
         unique_rows = transform_rows(rows, unique_keys, transform_func)
 
+        # 构建插入语句
+        target_columns = ', '.join(columns_mapping.keys())
+        await cursor.execute(f"SELECT {target_columns} FROM `{to_dbname}`.`{to_table_name}`")
+        ex_rows = await cursor.fetchall()
+        ex_rows = [tuple(r[i] for i in unique_keys) for r in ex_rows]
+        unique_rows = [row for row in unique_rows if tuple(row[i] for i in unique_keys) not in ex_rows]
         if not unique_rows:
-            print(f"表 '{table_name}' 去重后没有数据可迁移。")
+            print(f"表 '{from_table_name}' 去重后没有数据可迁移。")
+            return
+
+        placeholders = ', '.join(['%s'] * len(columns_mapping))
+        insert_sql = f"INSERT INTO `{to_dbname}`.`{to_table_name}` ({target_columns}) VALUES ({placeholders})"
+
+        # 批量插入数据
+        batch_size = 20000
+        for i in range(0, len(unique_rows), batch_size):
+            batch_rows = unique_rows[i:i + batch_size]
+            await cursor.executemany(insert_sql, batch_rows)
+            await conn.commit()
+
+        print(f"表 '{from_table_name}' -> '{to_table_name}' 数据迁移完成，共迁移 {len(unique_rows)} 条记录（去重前 {len(rows)} 条）。")
+
+
+async def migrate_table_as_is(
+    from_dbname: str,
+    to_dbname: str,
+    from_table_name: str,
+    to_table_name: str = None,
+    unique_keys: List[str] = []
+):
+    conn = await get_connection()
+    async with conn.cursor() as cursor:
+        # 检查源数据库是否存在
+        if not await check_database_exists(cursor, from_dbname):
+            print(f"源数据库 '{from_dbname}' 不存在，无法进行数据迁移。")
+            return
+
+        # 查询源数据
+        await cursor.execute(f"SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = '{from_dbname}' AND TABLE_NAME = '{from_table_name}'")
+        result = await cursor.fetchall()
+        columns = [row[0] for row in result]
+
+        source_columns = ', '.join(columns)
+        await cursor.execute(f"SELECT {source_columns} FROM `{from_dbname}`.`{from_table_name}`")
+        rows = await cursor.fetchall()
+
+        if not rows:
+            print(f"源表 '{from_table_name}' 中没有数据可迁移。")
             return
 
         # 构建插入语句
-        target_columns = ', '.join(columns_mapping.keys())
-        placeholders = ', '.join(['%s'] * len(columns_mapping))
-        insert_sql = f"INSERT INTO `{to_dbname}`.`{table_name}` ({target_columns}) VALUES ({placeholders})"
+        target_columns = source_columns
+        placeholders = ', '.join(['%s'] * len(columns))
+        if to_table_name is None:
+            to_table_name = from_table_name
+
+        if unique_keys:
+            update_columns = [f"{column} = VALUES({column})" for column in columns if column not in unique_keys]
+            update_clause = ', '.join(update_columns)
+
+            insert_sql = f"INSERT INTO `{to_dbname}`.`{to_table_name}` ({target_columns}) VALUES ({placeholders}) ON DUPLICATE KEY UPDATE {update_clause}"
+        else:
+            insert_sql = f"INSERT INTO `{to_dbname}`.`{to_table_name}` ({target_columns}) VALUES ({placeholders})"
 
         # 批量插入数据
-        await cursor.executemany(insert_sql, unique_rows)
+        await cursor.executemany(insert_sql, rows)
         await conn.commit()
 
-        print(f"表 '{table_name}' 数据迁移完成，共迁移 {len(unique_rows)} 条记录（去重前 {len(rows)} 条）。")
-
+        print(f"表 '{from_table_name}' -> '{to_table_name}' 数据迁移完成，共迁移 {len(rows)} 条记录（去重前 {len(rows)} 条）。")
 
 async def migrate_stock_bonus_shares():
     """迁移 stock_bonus_shares 表"""
@@ -161,9 +219,291 @@ async def migrate_stock_bonus_shares():
             conn=conn,
             from_dbname=from_dbname,
             to_dbname=to_dbname,
-            table_name=table_name,
+            from_table_name=table_name,
+            to_table_name=table_name,
             columns_mapping=columns_mapping,
             unique_keys=[0, 1],  # 使用 code 和 report_date 去重
+            transform_func=transform_func
+        )
+    finally:
+        conn.close()
+
+async def migrate_stock_bkmap(from_tbl: str = 'stock_bk_map'):
+    """迁移 stock_bkmap 表"""
+    conn = await get_connection()
+
+    from_dbname = 'stock_center'
+    to_dbname = 'pylone'
+    table_name = 'stock_bk_map'
+
+    columns_mapping = {
+        'bk': 'bk',
+        'stock': 'stock'
+    }
+
+    # 定义转换函数：将 stock 字段转换为小写
+    def transform_func(row):
+        return None if row[1].startswith(('HB', 'SB')) else (row[0], row[1].lower(),)
+
+    try:
+        await migrate_table(
+            conn=conn,
+            from_dbname=from_dbname,
+            to_dbname=to_dbname,
+            from_table_name=from_tbl,
+            to_table_name=table_name,
+            columns_mapping=columns_mapping,
+            unique_keys=[0, 1],  # 使用 code 和 bk_code 去重
+            transform_func=transform_func
+        )
+    finally:
+        conn.close()
+
+
+async def migrate_stock_bks(from_tbl: str = 'stock_embks'):
+    """迁移 stock_bks 表"""
+    conn = await get_connection()
+
+    from_dbname = 'stock_center'
+    to_dbname = 'pylone'
+    table_name = 'stock_bks'
+
+    columns_mapping = {
+        'code': 'code',
+        'name': 'name',
+        'chgignore': ''
+    }
+
+    def transform_func(row):
+        return row[:] + (0,)
+
+    try:
+        await migrate_table(
+            conn=conn,
+            from_dbname=from_dbname,
+            to_dbname=to_dbname,
+            from_table_name=from_tbl,
+            to_table_name=table_name,
+            columns_mapping=columns_mapping,
+            unique_keys=[0],  # 使用 code 去重
+            transform_func=transform_func
+        )
+    finally:
+        conn.close()
+
+async def migrate_change_ignored():
+    """迁移 stock_bks 表的 chgignore 字段"""
+    conn = await get_connection()
+
+    from_dbname = 'stock_center'
+    to_dbname = 'pylone'
+    ignore_table = 'stock_embks_chg_ignored'
+    table_name = 'stock_bks'
+
+    columns_mapping = {
+        'code': 'code'
+    }
+
+    try:
+        async with conn.cursor() as cursor:
+            # 检查源数据库是否存在
+            if not await check_database_exists(cursor, from_dbname):
+                print(f"源数据库 '{from_dbname}' 不存在，无法进行数据迁移。")
+                return
+
+            # 查询源数据
+            source_columns = ', '.join(columns_mapping.values())
+            await cursor.execute(f"SELECT {source_columns} FROM `{from_dbname}`.`{ignore_table}`")
+            rows = await cursor.fetchall()
+
+            if not rows:
+                print(f"源表 '{ignore_table}' 中没有数据可迁移。")
+                return
+
+            codes_to_ignore = {row[0] for row in rows}
+
+            # 更新目标表的 chgignore 字段
+            update_sql = f"UPDATE `{to_dbname}`.`{table_name}` SET chgignore = 1 WHERE code = %s"
+            for code in codes_to_ignore:
+                await cursor.execute(update_sql, (code,))
+            await conn.commit()
+
+            print(f"表 '{table_name}' 的 chgignore 字段更新完成，共更新 {len(codes_to_ignore)} 条记录。")
+    finally:
+        conn.close()
+
+async def migrate_stock_changes():
+    """迁移 stock_changes 表"""
+    assert migrate_stock_changes.__name__ != 'migrate_stock_changes', "'migrate_stock_changes' not allowed as takes too long time"
+    conn = await get_connection()
+
+    from_dbname = 'history_db'
+    to_dbname = 'pylone'
+    from_table_name = 'stock_changes_history'
+    table_name = 'stock_changes'
+
+    columns_mapping = {
+        'code': 'code',
+        'time': 'date',
+        'chgtype': 'type',
+        'info': 'info',
+    }
+
+    # 定义转换函数：将 time 字段格式化为统一格式
+    def transform_func(row):
+        return (row[0].lower(),) + row[1:]
+
+    try:
+        await migrate_table(
+            conn=conn,
+            from_dbname=from_dbname,
+            to_dbname=to_dbname,
+            from_table_name=from_table_name,
+            to_table_name=table_name,
+            columns_mapping=columns_mapping,
+            unique_keys=[0, 1, 2],  # 使用 code 和 time 去重
+            transform_func=transform_func
+        )
+    finally:
+        conn.close()
+
+async def migrate_day_zt_stocks(from_tbl: str = 'day_zt_stocks', mkt=0):
+    """迁移 day_zt_stocks 表"""
+    conn = await get_connection()
+
+    from_dbname = 'history_db'
+    to_dbname = 'pylone'
+    table_name = 'day_zt_stocks'
+
+    columns_mapping = {
+        'code': 'code',
+        'time': 'date',
+        'fund': '涨停封单',
+        'hsl': '换手率',
+        'lbc': '连板数',
+        'days': '总天数',
+        'zbc': '炸板数',
+        'bk': '板块',
+        'cpt': '概念',
+        'mkt': ''
+    }
+
+    # 定义转换函数：将 time 字段格式化为统一格式
+    def transform_func(row):
+        return (row[0].lower(),row[1],row[2] if row[2] and row[2] != '' else 0,float(row[3])/100) + row[4:8] + (row[8] or '', mkt,)
+
+    try:
+        await migrate_table(
+            conn=conn,
+            from_dbname=from_dbname,
+            to_dbname=to_dbname,
+            from_table_name=from_tbl,
+            to_table_name=table_name,
+            columns_mapping=columns_mapping,
+            unique_keys=[0, 1],  # 使用 code 和 time 去重
+            transform_func=transform_func
+        )
+    finally:
+        conn.close()
+
+async def migrate_day_zt_concepts():
+    """迁移 day_zt_concepts 表"""
+    conn = await get_connection()
+
+    from_dbname = 'history_db'
+    to_dbname = 'pylone'
+    table_name = 'day_zt_concepts'
+
+    columns_mapping = {
+        'time': 'date',
+        'cpt': '概念',
+        'ztcnt': '涨停数',
+    }
+
+    def transform_func(row):
+        return (row[0],row[1],row[2]) if row[2] and row[2] > 1 else None
+
+    try:
+        await migrate_table(
+            conn=conn,
+            from_dbname=from_dbname,
+            to_dbname=to_dbname,
+            from_table_name=table_name,
+            to_table_name=table_name,
+            columns_mapping=columns_mapping,
+            unique_keys=[0, 1],  # 使用 time 和 cpt 去重
+            transform_func=transform_func
+        )
+    finally:
+        conn.close()
+
+
+async def migrate_day_dt_stocks():
+    """迁移 day_dt_stocks 表"""
+    conn = await get_connection()
+
+    from_dbname = 'history_db'
+    to_dbname = 'pylone'
+    table_name = 'day_dt_stocks'
+
+    columns_mapping = {
+        'code': 'code',
+        'time': 'date',
+        'fund': '封单资金',
+        'fba': '板上成交额',
+        'hsl': '换手率',
+        'lbc': '连板数',
+        'zbc': '开板数',
+        'bk': '板块',
+        'mkt': ''
+    }
+
+    # 定义转换函数：将 time 字段格式化为统一格式
+    def transform_func(row):
+        return (row[0].lower(),row[1],row[2] if row[2] and row[2] != '' else 0,row[3],float(row[4])/100) + row[5:8] + (0 if row[0].startswith(('SH60', 'SZ00')) else 2 if row[0].startswith('BJ') else 1,)
+
+    try:
+        await migrate_table(
+            conn=conn,
+            from_dbname=from_dbname,
+            to_dbname=to_dbname,
+            from_table_name=table_name,
+            to_table_name=table_name,
+            columns_mapping=columns_mapping,
+            unique_keys=[0, 1],  # 使用 code 和 time 去重
+            transform_func=transform_func
+        )
+    finally:
+        conn.close()
+
+async def migrate_stock_dt_map():
+    """迁移 stock_dt_map 表"""
+    conn = await get_connection()
+
+    from_dbname = 'history_db'
+    to_dbname = 'pylone'
+    table_name = 'day_dt_maps'
+
+    columns_mapping = {
+        'time': 'date',
+        'code': 'code',
+        'step': 'step',
+        'success': 'success',
+    }
+
+    # 定义转换函数：将 code 字段转换为小写
+    def transform_func(row):
+        return (row[0], row[1].lower(), row[2], row[3],)
+
+    try:
+        await migrate_table(
+            conn=conn,
+            from_dbname=from_dbname,
+            to_dbname=to_dbname,
+            from_table_name=table_name,
+            to_table_name=table_name,
+            columns_mapping=columns_mapping,
+            unique_keys=[0, 1],  # 使用 time 和 code 去重
             transform_func=transform_func
         )
     finally:
@@ -214,6 +554,7 @@ async def migrate_kline_data(
             dtypes = [(col, 'U20' if col == 'time' else 'float64') for col in columns_mapping.keys()]
             odata = np.array([tuple(r) for r in unique_rows], dtype=dtypes)
             khis.save_kline(code, kltype, odata)
+
 
 async def migrate_stock_klines(code: str):
     """迁移指定股票的 K 线数据"""
@@ -266,11 +607,26 @@ async def setup_holidays():
     date = datetime.strptime(trading_dates[0], '%Y-%m-%d')
     holidays = []
     while date < datetime.now():
-        if date.weekday() < 5 and date.strftime('%Y-%m-%d') not in trading_dates:
-            holidays.append(date.strftime('%Y-%m-%d'))
+        date_str = date.strftime('%Y-%m-%d')
+        if date.weekday() < 5 and date_str not in trading_dates and date_str < trading_dates[-1]:
+            holidays.append(date_str)
         date += timedelta(days=1)
 
     await insert_many(MdlHolidays, [{'date': d} for d in holidays] )
 
 if __name__ == '__main__':
-    asyncio.run(migrate_stock_klines('sh688588'))
+    loop = asyncio.get_event_loop()
+    # loop.run_until_complete(migrate_table_as_is('testdb', 'pylone', 'stock_bks', unique_keys=['code']))
+    # loop.run_until_complete(migrate_stock_bkmap())
+    # loop.run_until_complete(migrate_stock_bkmap('stock_bkcls_map'))
+    # loop.run_until_complete(migrate_stock_bks())
+    # loop.run_until_complete(migrate_stock_bks('stock_clsbks'))
+    # loop.run_until_complete(migrate_change_ignored())
+    # loop.run_until_complete(migrate_stock_changes())
+    # loop.run_until_complete(migrate_day_zt_stocks('day_zt_stocks', mkt=0))
+    # loop.run_until_complete(migrate_day_zt_stocks('day_zt_stocks_kccy', mkt=1))
+    # loop.run_until_complete(migrate_day_zt_stocks('day_zt_stocks_bj', mkt=2))
+    # loop.run_until_complete(migrate_day_zt_stocks('day_zt_stocks_st', mkt=3))
+    # loop.run_until_complete(migrate_day_zt_concepts())
+    # loop.run_until_complete(migrate_day_dt_stocks())
+    loop.run_until_complete(migrate_stock_dt_map())
