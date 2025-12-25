@@ -113,20 +113,26 @@ class AllStocks:
             logger.warning('too many stocks to update for 1 day, please call update_kline_data("d") first!')
             return
 
+        def update_and_save(codes, length, fkl=False):
+            klines = srt.fklines(codes, kltype, 0) if fkl else srt.klines(codes, kltype, length, 0)
+            for c in klines:
+                if c in stocks:
+                    khis.save_kline(c, kltype, klines[c])
+
         ofmt = srt.set_array_format('np')
         # srt.set_default_sources('dklines', 'dklines', ('xueqiu', 'ths', 'eastmoney', 'tdx', 'sina'), True)
         srt.set_default_sources('dklines', 'dklines', ('xueqiu', 'ths', 'tdx', 'sina'), True)
-        klines = {}
+        ksize = 500
         for l, codes in fixlens.items():
             if l == sys.maxsize:
-                klines.update(srt.fklines(codes, kltype, 0))
+                for i in range(0, len(codes), ksize):
+                    batch = codes[i:i+ksize]
+                    update_and_save(batch, l, fkl=True)
             else:
-                klines.update(srt.klines(codes, kltype, l+2, 0))
-        for c in klines:
-            if c in stocks:
-                khis.save_kline(c, kltype, klines[c])
+                for i in range(0, len(codes), ksize):
+                    batch = codes[i:i+ksize]
+                    update_and_save(batch, l, fkl=False)
         srt.set_array_format(ofmt)
-        return [c for c in sum(fixlens.values(), []) if c not in klines or len(klines[c]) == 0 or TradingDate.calc_trading_days(klines[c][-1]['time'], TradingDate.max_trading_date()) > 20]
 
     @classmethod
     async def update_stock_daily_kline_and_fflow(cls, cns: dict = {}):
@@ -193,14 +199,19 @@ class AllStocks:
         if not stocks:
             logger.info('no stocks need to update transactions')
             return
-        trans = qot.get_transactions(stocks)
-        for k, v in trans.items():
-            if not v:
-                logger.warning(f'no transactions for {k}')
-                continue
-            cols = ['time', 'price', 'volume', 'num', 'bs'] if len(v[0]) == 5 else ['time', 'price', 'volume', 'bs']
-            nptrans = np.array([tuple(v_) for v_ in v], [(c, sts.restore_dtype.get(c, 'float64')) for c in cols])
-            sts.save_dataset(k, nptrans)
+
+        tsize = 1000
+        for i in range(0, len(stocks), tsize):
+            batch = stocks[i:i+tsize]
+            trans = qot.get_transactions(batch)
+            for k, v in trans.items():
+                if not v:
+                    logger.warning(f'no transactions for {k}')
+                    continue
+                cols = ['time', 'price', 'volume', 'num', 'bs'] if len(v[0]) == 5 else ['time', 'price', 'volume', 'bs']
+                nptrans = np.array([tuple(v_) for v_ in v], [(c, sts.restore_dtype.get(c, 'float64')) for c in cols])
+                sts.save_dataset(k, nptrans)
+            logger.info(f'saved transactions for stocks: {i} - {i+len(batch)} / {len(stocks)}')
 
     @classmethod
     async def is_quited(cls, code):

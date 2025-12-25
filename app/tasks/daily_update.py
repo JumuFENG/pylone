@@ -5,17 +5,17 @@ import sys
 import os
 import traceback
 import asyncio
-from threading import Thread
 from datetime import datetime
 sys.path.insert(0, os.path.realpath(os.path.dirname(__file__) + '/../..'))
-# from utils import Utils
-# from history import *
-# from pickup import *
-# from phon.data.user import User
+from app.admin.router import admin_user_list
+from app.users.manager import UserStockManager as usm
 from app.lofig import Config, logging
 from app.stock.date import TradingDate
 from app.stock.manager import AllStocks, AllBlocks
-from app.stock.history import StockShareBonus, StockChanges, StockBkMap, StockZtDaily, StockZtConcepts, StockDtInfo, StockDtMap
+from app.stock.history import Khistory as khis
+from app.stock.history import StockShareBonus, StockChanges, StockZtDaily, StockZtConcepts, StockDtInfo, StockDtMap
+from app.selectors import StockDt3Selector
+
 logger = logging.getLogger(f'{Config.app_name}.{__package__}')
 
 
@@ -40,7 +40,6 @@ class DailyUpdater():
             logger.info(f"update in the morning at {datetoday.hour}")
 
         await cls.download_all_index_history()
-        cls.update_stock_hotrank()
         await cls.update_new_stocks()
         if morningOnetime:
             # 只在早上执行的任务
@@ -53,7 +52,7 @@ class DailyUpdater():
             # 机构游资龙虎榜，可以间隔，首选晚上更新
             cls.fetch_dfsorg_stocks()
             # 更新所有股票都日k数据
-            cls.download_all_stocks_khistory()
+            await cls.download_all_stocks_khistory()
             # 涨跌停数据，可以间隔，早晚都合适
             await cls.fetch_zdt_stocks()
             # 盘口异动数据, 每个交易日收盘后更新, 错过无法补录
@@ -70,31 +69,31 @@ class DailyUpdater():
         logger.info('index history updated!')
 
     @classmethod
-    def download_all_stocks_khistory(cls):
+    async def download_all_stocks_khistory(cls):
         logger.info('start download_all_stocks_khistory')
-        # all_users = User.all_users()
+        all_users = await admin_user_list(None)
         allcodes = []
-        # for u in all_users:
-        #     if u.id <= 10:
-        #         continue
-        #     if u.realcash == 0:
-        #         u.forget_stocks()
-        #     ustks = u.all_interest_stocks()
-        #     if ustks:
-        #        allcodes = allcodes + ustks
+        for u in all_users:
+            if u.realcash == 0:
+                usm.forget_stocks(u)
+            ustks = await usm.watching_stocks(u)
+            for c in ustks:
+                if not AllStocks.is_quited(c):
+                    allcodes.append(c)
+                else:
+                    await usm.forget_stock(u, c)
 
-        # allcodes = [s for s in set(allcodes) if not AllStocks.is_quited(s)]
-        # upfailed = AllStocks.update_klines_by_code(allcodes, 'd')
-        # if not upfailed:
-        #     logger.info('all stocks kline data updated!')
-        #     return
+        allcodes = list(set(allcodes))
+        AllStocks.update_klines_by_code(allcodes, 'd')
 
-        # upfailed = [s.upper() for s in upfailed]
-        # if upfailed:
-        #     sa = StockAnnoucements()
-        #     logger.info(f'stocks update failed: {upfailed}')
-        #     sa.check_stock_quit(upfailed)
-        #     sa.check_fund_quit(upfailed)
+        upfailed = []
+        for c in allcodes:
+            date = await khis.max_date(c, 'd')
+            if TradingDate.calc_trading_days(date, TradingDate.max_trading_date()) > 20:
+                upfailed.append(c)
+        if upfailed:
+            logger.info(f'stocks update failed: {upfailed}')
+            await AllStocks.check_stock_quit(upfailed)
 
         logger.info('download_all_stocks_khistory done! %d' % len(allcodes))
 
@@ -115,12 +114,6 @@ class DailyUpdater():
             await dbns.getNext()
         except Exception as e:
             logger.info(e)
-        # logger.info('update announcements')
-        # try:
-        #     ann = StockAnnoucements()
-        #     ann.getNext()
-        # except Exception as e:
-        #     logger.info(e)
 
     @classmethod
     async def fetch_zdt_stocks(cls):
@@ -155,32 +148,19 @@ class DailyUpdater():
 
     @classmethod
     async def update_selectors(cls):
-        logger.info('update dtmap info')
-        sdm = StockDtMap()
-        await sdm.update_pickups()
-
-        # logger.info('update dt3')
-        # dts = StockDt3Selector()
-        # dts.updateDt3()
-
-        # selectors = [
+        selectors = [StockDtMap(), StockDt3Selector()]
         #     StockDztSelector(), StockZt1Selector(), StockZt1WbSelector(), StockCentsSelector(),
         #     StockMaConvergenceSelector(), StockZdfRanks(), StockZtLeadingSelector(), StockZtLeadingStepsSelector(),
         #     StockZtLeadingSelectorST(), StockDztStSelector(), StockDztBoardSelector(), StockDztStBoardSelector(),
         #     StockZdtEmotion(), StockHotStocksRetryZt0Selector(),
         #     StockZt1BreakupSelector(), StockZt1j2Selector(), StockLShapeSelector(), StockDfsorgSelector(),
-        #     StockTrippleBullSelector(), StockEndVolumeSelector()]
-        # for sel in selectors:
-        #     logger.info(f'update { sel.__class__.__name__}')
-        #     sel.updatePickUps()
+        #     StockTrippleBullSelector(), StockEndVolumeSelector()
+        for sel in selectors:
+            logger.info(f'update { sel.__class__.__name__}')
+            await sel.update_pickups()
 
     @classmethod
     async def update_twice_selectors(cls):
-        # selectors = [
-        #     StockUstSelector()]
-        # for sel in selectors:
-        #     logger.info(f'update {sel.__class__.__name__}')
-        #     sel.updatePickUps()
         pass
 
     @classmethod
@@ -196,11 +176,13 @@ class DailyUpdater():
 
     @classmethod
     async def update_fixzdt(self):
-        # await self.fetch_zdt_stocks()
+        await self.fetch_zdt_stocks()
         await self.update_stock_changes()
         await self.update_selectors()
         await self.update_twice_selectors()
 
 
 if __name__ == '__main__':
-    asyncio.run(DailyUpdater.update_stock_changes())
+    loop = asyncio.get_event_loop()
+    loop.run_until_complete(DailyUpdater.update_all())
+    # loop.run_until_complete(DailyUpdater.update_selectors())
