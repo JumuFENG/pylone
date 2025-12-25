@@ -26,7 +26,7 @@ class TradingDate():
     @lru_cache(maxsize=1)
     def max_traded_date(cls):
         return kls.max_date('sh000001')
-    
+
     @classmethod
     @lru_cache(maxsize=1)
     def min_traded_date(cls):
@@ -52,6 +52,14 @@ class TradingDate():
         afternoon = (datetime.time(13, 0), datetime.time(15, 0))
 
         return (morning[0] <= now <= morning[1]) or (afternoon[0] <= now <= afternoon[1])
+
+    @classmethod
+    def trading_ended(cls):
+        if TradingDate.is_holiday(cls.today()):
+            return False
+
+        now = datetime.datetime.now().time()
+        return now >= datetime.time(15, 0)
 
     @classmethod
     def trading_started(cls):
@@ -147,6 +155,7 @@ class TradingDate():
         """强制刷新缓存"""
         cls.max_traded_date.cache_clear()
         cls.max_trading_date.cache_clear()
+        cls.min_traded_date.cache_clear()
 
     @classmethod
     async def load_holidays(cls):

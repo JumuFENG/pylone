@@ -1,6 +1,8 @@
 from fastapi import APIRouter, Query, HTTPException, Depends
 from typing import Optional
+from traceback import format_exc
 from app import PostParams, pparam_doc
+from app.lofig import logger
 from app.users.manager import (
     User, fastapi_users, get_current_user_basic, verify_user,
     UserStockManager as usm)
@@ -124,6 +126,8 @@ async def stock_kline(
             result.update(srt.klines(codes_unsaved, kltype, length, fqt))
         return result
     except Exception as e:
+        logger.error(e)
+        logger.debug(format_exc())
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -133,6 +137,8 @@ def stock_quotes(code: str = Query(..., min_length=6)):
         code = qot._normalize_codes(code)
         return qot.get_quotes(code)
     except Exception as e:
+        logger.error(e)
+        logger.debug(format_exc())
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/tlines")
@@ -141,4 +147,6 @@ def stock_tlines(code: str = Query(..., min_length=6)):
         code = qot._normalize_codes(code)
         return qot.get_tlines(code)
     except Exception as e:
+        logger.error(e)
+        logger.debug(format_exc())
         raise HTTPException(status_code=500, detail=str(e))

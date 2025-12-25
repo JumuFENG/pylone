@@ -71,7 +71,11 @@ class Khistory:
         if srt.to_int_kltype(kltype) not in kls.saved_kline_types:
             return 0
         guessed = cls.guess_bars_since(cls.max_date(code, kltype), kltype)
-        return guessed if guessed == sys.maxsize else max(guessed, 0)
+        if guessed == sys.maxsize:
+            return guessed
+        if not TradingDate.trading_ended():
+            guessed -= 1
+        return max(guessed, 0)
 
     @classmethod
     async def read_kline(cls, code, kline_type, fqt=0, length=None, start=None):
@@ -131,12 +135,12 @@ class Khistory:
             gx = [(0, 0)]
 
             # 移除超出范围的分红数据
-            while len(bndata) > 0 and bndata[-1][2] > result['time'][-1]:
+            while len(bndata) > 0 and bndata[-1].ex_dividend_date > result['time'][-1]:
                 bndata.pop()
 
             for bi in range(-1, -len(bndata) - 1, -1):
                 while fid >= 0:
-                    if result['time'][fid] >= bndata[bi][2]:
+                    if result['time'][fid] >= bndata[bi].ex_dividend_date:
                         result['open'][fid] = fix_single_pre(float(result['open'][fid]), gx)
                         result['high'][fid] = fix_single_pre(float(result['high'][fid]), gx)
                         result['low'][fid] = fix_single_pre(float(result['low'][fid]), gx)
@@ -144,12 +148,12 @@ class Khistory:
                         fid -= 1
                         continue
 
-                    if bndata[bi][4] is None or bndata[bi][4] == '0':
-                        gx.append((0, float(bndata[bi][7]) / 10))
-                    elif bndata[bi][7] is None or bndata[bi][7] == '0':
-                        gx.append((float(bndata[bi][4]) / 10, 0))
+                    if bndata[bi].total_bonus is None or bndata[bi].total_bonus == '0':
+                        gx.append((0, float(bndata[bi].cash_dividend) / 10))
+                    elif bndata[bi].cash_dividend is None or bndata[bi].cash_dividend == '0':
+                        gx.append((float(bndata[bi].total_bonus) / 10, 0))
                     else:
-                        gx.append((float(bndata[bi][4]) / 10, float(bndata[bi][7]) / 10))
+                        gx.append((float(bndata[bi].total_bonus) / 10, float(bndata[bi].cash_dividend) / 10))
                     break
 
             while fid >= 0:
@@ -165,32 +169,32 @@ class Khistory:
             fid = len(f0data) - 1
             gx = (0, 0),
             l0data = list(f0data)
-            while len(bndata) > 0 and bndata[-1][2] > l0data[-1][1]:
+            while len(bndata) > 0 and bndata[-1].ex_dividend_date > l0data[-1][0]:
                 bndata.pop()
             for bi in range(-1, -len(bndata) - 1, -1):
                 while fid >= 0:
-                    if (l0data[fid][1] >= bndata[bi][2]):
+                    if (l0data[fid][0] >= bndata[bi].ex_dividend_date):
                         fdid = list(l0data[fid])
+                        fdid[1] = fix_single_pre(float(fdid[1]), gx)
                         fdid[2] = fix_single_pre(float(fdid[2]), gx)
                         fdid[3] = fix_single_pre(float(fdid[3]), gx)
                         fdid[4] = fix_single_pre(float(fdid[4]), gx)
-                        fdid[5] = fix_single_pre(float(fdid[5]), gx)
                         l0data[fid] = tuple(fdid)
                         fid -= 1
                         continue
-                    if bndata[bi][4] is None or bndata[bi][4] == '0':
-                        gx += (0, float(bndata[bi][7]) / 10),
-                    elif bndata[bi][7] is None or bndata[bi][7] == '0':
-                        gx += (float(bndata[bi][4]) / 10, 0),
+                    if bndata[bi].total_bonus is None or bndata[bi].total_bonus == '0':
+                        gx += (0, float(bndata[bi].cash_dividend) / 10),
+                    elif bndata[bi].cash_dividend is None or bndata[bi].cash_dividend == '0':
+                        gx += (float(bndata[bi].total_bonus) / 10, 0),
                     else:
-                        gx += (float(bndata[bi][4]) / 10, float(bndata[bi][7]) / 10),
+                        gx += (float(bndata[bi].total_bonus) / 10, float(bndata[bi].cash_dividend) / 10),
                     break
             while fid >= 0:
                 fdid = list(l0data[fid])
+                fdid[1] = fix_single_pre(float(fdid[1]), gx)
                 fdid[2] = fix_single_pre(float(fdid[2]), gx)
                 fdid[3] = fix_single_pre(float(fdid[3]), gx)
                 fdid[4] = fix_single_pre(float(fdid[4]), gx)
-                fdid[5] = fix_single_pre(float(fdid[5]), gx)
                 l0data[fid] = tuple(fdid)
                 fid -= 1
             return tuple(l0data)
@@ -228,7 +232,7 @@ class Khistory:
 
             for bi in range(0, len(bndata)):
                 while fid < len(result):
-                    if result['time'][fid] < bndata[bi][2]:
+                    if result['time'][fid] < bndata[bi].ex_dividend_date:
                         result['open'][fid] = fix_single_post(float(result['open'][fid]), gx)
                         result['high'][fid] = fix_single_post(float(result['high'][fid]), gx)
                         result['low'][fid] = fix_single_post(float(result['low'][fid]), gx)
@@ -236,12 +240,12 @@ class Khistory:
                         fid += 1
                         continue
 
-                    if bndata[bi][4] is None or bndata[bi][4] == '0':
-                        gx.append((0, float(bndata[bi][7]) / 10))
-                    elif bndata[bi][7] is None or bndata[bi][7] == '0':
-                        gx.append((float(bndata[bi][4]) / 10, 0))
+                    if bndata[bi].total_bonus is None or bndata[bi].total_bonus == 0:
+                        gx.append((0, float(bndata[bi].cash_dividend) / 10))
+                    elif bndata[bi].cash_dividend is None or bndata[bi].cash_dividend == 0:
+                        gx.append((float(bndata[bi].total_bonus) / 10, 0))
                     else:
-                        gx.append((float(bndata[bi][4]) / 10, float(bndata[bi][7]) / 10))
+                        gx.append((float(bndata[bi].total_bonus) / 10, float(bndata[bi].cash_dividend) / 10))
                     break
 
             while fid < len(result):
@@ -259,28 +263,28 @@ class Khistory:
             fid = 0
             for bi in range(0, len(bndata)):
                 while fid < len(l0data):
-                    if (l0data[fid][1] < bndata[bi][2]):
+                    if (l0data[fid][0] < bndata[bi].ex_dividend_date):
                         fdid = list(l0data[fid])
+                        fdid[1] = fix_single_post(float(fdid[1]), gx)
                         fdid[2] = fix_single_post(float(fdid[2]), gx)
                         fdid[3] = fix_single_post(float(fdid[3]), gx)
                         fdid[4] = fix_single_post(float(fdid[4]), gx)
-                        fdid[5] = fix_single_post(float(fdid[5]), gx)
                         l0data[fid] = tuple(fdid)
                         fid += 1
                         continue
-                    if bndata[bi][4] is None or bndata[bi][4] == '0':
-                        gx += (0, float(bndata[bi][7]) / 10),
-                    elif bndata[bi][7] is None or bndata[bi][7] == '0':
-                        gx += (float(bndata[bi][4]) / 10, 0),
+                    if bndata[bi].total_bonus is None or bndata[bi].total_bonus == 0:
+                        gx += (0, float(bndata[bi].cash_dividend) / 10),
+                    elif bndata[bi].cash_dividend is None or bndata[bi].cash_dividend == 0:
+                        gx += (float(bndata[bi].total_bonus) / 10, 0),
                     else:
-                        gx += (float(bndata[bi][4]) / 10, float(bndata[bi][7]) / 10),
+                        gx += (float(bndata[bi].total_bonus) / 10, float(bndata[bi].cash_dividend) / 10),
                     break
             while fid < len(l0data):
                 fdid = list(l0data[fid])
+                fdid[1] = fix_single_post(float(fdid[1]), gx)
                 fdid[2] = fix_single_post(float(fdid[2]), gx)
                 fdid[3] = fix_single_post(float(fdid[3]), gx)
                 fdid[4] = fix_single_post(float(fdid[4]), gx)
-                fdid[5] = fix_single_post(float(fdid[5]), gx)
                 l0data[fid] = tuple(fdid)
                 fid += 1
             return l0data

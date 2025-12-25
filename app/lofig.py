@@ -45,7 +45,7 @@ class Config:
     @classmethod
     @lru_cache(maxsize=1)
     def _lg_path(cls):
-        lgpath = os.path.join(os.path.dirname(__file__), f'../logs/{cls.all_configs().get("app_name", "pyswee")}.log')
+        lgpath = os.path.join(os.path.dirname(__file__), f'../logs/{cls.client_config().get("app_name", "pyswee")}.log')
         if not os.path.isdir(os.path.dirname(lgpath)):
             os.mkdir(os.path.dirname(lgpath))
         return lgpath
