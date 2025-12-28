@@ -2,6 +2,7 @@ import sys
 import re
 import json
 import asyncio
+import hashlib
 import numpy as np
 from datetime import datetime
 from bs4 import BeautifulSoup
@@ -12,17 +13,16 @@ import stockrt as srt
 from app.lofig import logger
 from app.hu import classproperty, time_stamp
 from app.hu.network import Network, EmRequest, EmDataCenterRequest
+from app.hu.aes_decrypt import AesCBCBase64
 from app.db import (
-    or_,
     array_to_dict_list, query_one_value, query_values, query_aggregate,
     upsert_one, upsert_many, insert_many, delete_records)
-from . import dynamic_cache, async_lru, zt_priceby, zdf_from_code
+from . import dynamic_cache, lru_cache
 from .h5 import (KLineStorage as kls, FflowStorage as ffs)
 from .date import TradingDate
 from .models import (
     MdlAllStock, MdlStockList, MdlStockShare,MdlStockBk, MdlStockBkMap, MdlStockChanges, MdlStockBkChanges, MdlStockBkClsChanges,
-    MdlDayZtStocks, MdlDayDtStocks, MdlDayZtConcepts, MdlDayDtMap)
-from .schemas import KNode
+    MdlDayZtStocks, MdlDayDtStocks, MdlDayZtConcepts)
 
 
 class Khistory:
@@ -34,6 +34,7 @@ class Khistory:
     def fund_bonus_handler(cls):
         return FundShareBonus()
 
+    @lru_cache(maxsize=1024)
     @staticmethod
     def guess_bars_since(last_date, kltype='d'):
         if last_date is None or last_date == '':
@@ -97,6 +98,9 @@ class Khistory:
 
         if len(kldata) > length:
             kldata = kldata[-length:]
+
+        if start is not None:
+            kldata = kldata[kldata['time'] >= start]
 
         if fqt == 0:
             return kldata
@@ -526,122 +530,6 @@ class FundShareBonus(StockShareBonus):
         return await query_values(self.db, None, MdlStockShare.code == code)
 
 
-class StockBaseSelector():
-    def __init__(self, max_workers: int = 2) -> None:
-        self.max_workers = max_workers
-        self.wkstocks = []
-        self.wkselected = []
-
-    @property
-    def db(self):
-        pass
-
-    async def task_prepare(self, date: Optional[str] = None) -> None:
-        """准备任务"""
-        if date is None:
-            self.wkstocks = await query_values(
-                MdlAllStock, [MdlAllStock.code, MdlAllStock.setup_date],
-                or_(MdlAllStock.typekind == 'ABStock',MdlAllStock.typekind == 'TSStock', MdlAllStock.typekind == 'BJStock'))
-            self.wkstocks = [[c, d] for c, d in self.wkstocks]
-        else:
-            stks = await query_values(MdlAllStock, [MdlAllStock.code], or_(MdlAllStock.typekind == 'ABStock', MdlAllStock.typekind == 'BJStock'))
-            self.wkstocks = [[c, date] for c, in stks]
-        self.wkselected = []
-
-    async def post_process(self) -> None:
-        """后处理"""
-        if len(self.wkselected) > 0:
-            await insert_many(self.db, array_to_dict_list(self.db, self.wkselected), ['code', 'time'])
-
-    async def task_processing(self, item) -> None:
-        """任务处理逻辑"""
-        pass
-
-    async def start_multi_task(self, date: Optional[str] = None) -> None:
-        """
-        启动异步任务
-
-        Args:
-            date: 可选日期参数
-        """
-        # 准备阶段
-        await self.task_prepare(date)
-
-        ctime = datetime.now()
-
-        if self.max_workers <= 1:
-            for item in self.wkstocks:
-                await self.task_processing(item)
-        else:
-            q = asyncio.Queue()
-            for item in self.wkstocks:
-                await q.put(item)
-
-            async def _worker():
-                while True:
-                    try:
-                        item = await q.get()
-                    except asyncio.CancelledError:
-                        break
-                    try:
-                        await self.task_processing(item)
-                    except Exception:
-                        logger.error('error in task_processing %s', format_exc())
-                    finally:
-                        q.task_done()
-
-            workers = [asyncio.create_task(_worker()) for _ in range(self.max_workers)]
-            await q.join()
-            for w in workers:
-                w.cancel()
-            await asyncio.gather(*workers, return_exceptions=True)
-
-        # 记录执行时间
-        elapsed = datetime.now() - ctime
-        logger.info(f'异步任务完成，工作线程数: {self.max_workers}，耗时: {elapsed}')
-
-        # 后处理
-        await self.post_process()
-
-    async def update_pickups(self):
-        if getattr(self.db, 'time', None) is not None:
-            mdate = await query_aggregate('max', self.db, 'time')
-        else:
-            mdate = await query_aggregate('max', self.db, 'date')
-        if mdate == TradingDate.max_trading_date():
-            logger.info('%s update_pickups already updated to latest!', self.__class__.__name__)
-            return
-        await self.start_multi_task(mdate)
-
-    async def get_kd_data(self, code:str, start:str, fqt:int=0):
-        if not TradingDate.is_trading_date(start):
-            start = TradingDate.next_trading_date(start)
-        kd = await Khistory.read_kline(code, 'd', start=start, fqt=fqt)
-        if kd is None or len(kd) == 0:
-            return None
-        def safe_get(record, field_name, default=0.0):
-            if field_name in record.dtype.names:
-                value = record[field_name]
-                if value is None or (isinstance(value, float) and np.isnan(value)):
-                    return default
-                return float(value)
-            return default
-
-        return [KNode(
-            time=kl['time'],
-            open=kl['open'],
-            close=kl['close'],
-            high=kl['high'],
-            low=kl['low'],
-            volume=safe_get(kl, 'volume', 0),
-            amount=safe_get(kl, 'amount', 0),
-            change=safe_get(kl, 'change', 0),
-            change_px=safe_get(kl, 'change_px', 0),
-            amplitude=safe_get(kl, 'amplitude', 0),
-            turnover=safe_get(kl, 'turnover', 0)
-        ) for kl in kd]
-
-
 class FflowRequest(EmRequest):
     def __init__(self):
         super().__init__()
@@ -703,6 +591,12 @@ class FflowHistory:
             return
         cls.fclient.setCode(code)
         await cls.fclient.getNext()
+
+    @classmethod
+    def get_main_fflow(cls, code, date=None, date1=None):
+        if date is None:
+            date = ffs.max_date(code)
+        return ffs.read_fflow(code, date, date1)
 
 
 class StockBkMap(EmRequest):
@@ -1255,6 +1149,7 @@ class StockZtInfo10jqka(EmRequest):
 
         return ztdata
 
+
 class StockZtInfo(EmRequest):
     '''涨停
     ref: http://quote.eastmoney.com/ztb/detail#type=ztgc
@@ -1313,196 +1208,6 @@ class StockZtInfo(EmRequest):
             ztdata.append([code, date, fund, hsl, lbc, days, zbc, hybk, '', mkt])
 
         return ztdata
-
-class StockZtDaily(StockBaseSelector):
-    def __init__(self):
-        super().__init__(1)
-
-    @property
-    def db(self):
-        return MdlDayZtStocks
-
-    @property
-    def ztinfo(self):
-        return StockZtInfo()
-
-    @property
-    def jqkinfo(self):
-        return StockZtInfo10jqka()
-
-    @async_lru()
-    async def st_stocks(self):
-        sts = await query_values(MdlStockBkMap, MdlStockBkMap.stock, MdlStockBkMap.bk == 'BK0511')
-        return [s for s, in sts]
-
-    async def is_st_stock(self, code):
-        sts = await self.st_stocks()
-        return code in sts
-
-    async def task_prepare(self, date: Optional[str] = None):
-        onlycalc = date is None
-        if date is None:
-            await super().task_prepare(date)
-        else:
-            date = TradingDate.next_trading_date(date)
-            stks = await query_values(MdlAllStock, [MdlAllStock.code], or_(MdlAllStock.typekind == 'ABStock', MdlAllStock.typekind == 'BJStock'))
-            self.wkstocks = [[c, date] for c, in stks]
-            self.wkselected = []
-
-        for i, w in enumerate(self.wkstocks):
-            sdate = await query_aggregate('max', self.db, 'time', MdlDayZtStocks.code == w[0], MdlDayZtStocks.lbc == 1)
-            if sdate is None or sdate == 0:
-                sdate = ''
-            else:
-                sdate = TradingDate.prev_trading_date(sdate)
-            self.wkstocks[i].append(sdate)
-
-        while not onlycalc:
-            ztdata = self.ztinfo.getNext(date)
-            jqkztdata = self.jqkinfo.getNext(date)
-            for ztobj in jqkztdata:
-                zdata = next((t for t in ztdata if t[0] == ztobj[0] and t[1] == ztobj[1]), None)
-                if zdata:
-                    zdata[-2] = ztobj[-2]
-                else:
-                    ztdata.append(ztobj)
-            self.wkselected.extend(ztdata)
-            if date == TradingDate.max_trading_date():
-                break
-            date = TradingDate.next_trading_date(date)
-
-    async def get_embk(self, code):
-        bks = await query_values(MdlStockBkMap, 'bk', MdlStockBkMap.stock == code)
-        if bks is None or len(bks) == 0:
-            return ''
-        bk, = bks[0]
-        return await query_one_value(MdlStockBk, 'name', MdlStockBk.code == bk)
-
-    @async_lru()
-    async def get_bk(self, code):
-        bks = await query_values(self.db, 'bk', self.db.code == code)
-        if bks is None or len(bks) == 0:
-            return await self.get_embk(code)
-
-        for i in range(len(bks) - 1, 0, -1):
-            bk, = bks[i]
-            if bk != '':
-                return bk
-        return await self.get_embk(code)
-
-    @async_lru()
-    async def get_concept(self, code):
-        cpts = await query_values(self.db, 'cpt', self.db.code == code)
-        if cpts is None or len(cpts) == 0:
-            return ''
-        for i in range(len(cpts) - 1, 0, -1):
-            cpt, = cpts[i]
-            if cpt != '':
-                return cpt
-        return ''
-
-    async def merge_selected(self, sel):
-        osel = next((s for s in self.wkselected if s[0] == sel[0] and s[1] == sel[1]), None)
-        if not osel:
-            sel[7] = await self.get_bk(sel[0])
-            sel[8] = await self.get_concept(sel[0])
-            self.wkselected.append(sel)
-            return
-        if osel[7] == '':
-            osel[7] = await self.get_bk(sel[0])
-        if osel[8] == '':
-            osel[8] = await self.get_concept(sel[0])
-        if osel[4] != sel[4]:
-            osel[4] = sel[4]
-        if osel[5] != sel[5]:
-            osel[5] = sel[5]
-
-    async def task_processing(self, item):
-        c, zdate, sdate = item
-        allkl = await self.get_kd_data(c, start=sdate)
-        if allkl is None or len(allkl) == 0:
-            return
-
-        zdf = zdf_from_code(c)
-        if zdf == 10 and await self.is_st_stock(c):
-            zdf = 5
-        mkt = [10, 20, 30, 5].index(zdf)
-
-        i = 0
-        while i < len(allkl):
-            if allkl[i].time < zdate:
-                i += 1
-                continue
-            if i == 0 and allkl[i].close == allkl[i].high and allkl[i].change * 100 >= zdf - 0.1:
-                await self.merge_selected([c, allkl[i].time, 0, 0, 1, 1, 0, "", "", mkt])
-                i += 1
-                continue
-
-            c0 = allkl[i-1].close
-            if allkl[i].close == allkl[i].high and allkl[i].close >= zt_priceby(c0, zdf=zdf):
-                days = 1
-                lbc = 1
-                t = i
-                j = i - 1
-                while j >= 0:
-                    if j == 0:
-                        if allkl[j].change * 100 >= zdf - 0.1:
-                            lbc += 1
-                            days += t
-                        break
-                    c0 = allkl[j-1].close
-                    if allkl[j].close == allkl[j].high and allkl[j].close >= zt_priceby(c0, zdf=zdf):
-                        lbc += 1
-                        days += t - j
-                        t = j
-                        j -= 1
-                        continue
-                    if t - j >= 3:
-                        break
-                    j -= 1
-                if lbc == 1:
-                    days = 1
-                await self.merge_selected([c, allkl[i].time, 0, 0, lbc, days, 0, "", "", mkt])
-            i += 1
-
-    async def get_hot_stocks(self, date):
-        zts = await query_values(self.db, ['code', 'time', 'days', 'lbc'], self.db.time == date)
-        ztdate = {}
-        for c, d, days, lbc in zts:
-            if c not in ztdate:
-                ztdate[c] = d
-            elif d > ztdate[c]:
-                ztdate[c] = d
-
-        return [[c, d, days, lbc] for c, d, days, lbc in zts if d == ztdate[c]]
-
-    async def dump_main_stocks_zt0(self, date=None):
-        if date is None:
-            date = await query_aggregate('max', self.db, 'time')
-
-        await query_values(self.db, ['code', 'bk', 'cpt'], self.db.time == date, self.db.lbc == 1, self.db.mkt == 0)
-
-    async def dump_by_concept(self, date, concept):
-        if date is None:
-            return []
-
-        zts = await query_values(self.db, ['code', 'lbc', 'bk', 'cpt'], self.db.time == date)
-
-        def unify_concepts(zts):
-            return [[c, n, bk if con == '' else con] for c, n, bk, con in zts]
-
-        if concept is not None:
-            ztcpt = []
-            for c, n, bk, con in zts:
-                cons = [bk]
-                if '+' in con:
-                    cons = con.split('+')
-                elif con != '':
-                    cons = [con]
-                if concept in cons:
-                    ztcpt.append([c, n, bk, con])
-            return unify_concepts(ztcpt)
-        return unify_concepts(zts)
 
 
 class StockZtConcepts():
@@ -1656,119 +1361,69 @@ class StockDtInfo(EmRequest):
         return {'date': date,'pool':[]}
 
 
-class StockDtMap(StockBaseSelector):
-    '''跌停进度表
+class StockHotRank(EmRequest):
+    ''' 获取人气榜
+    http://guba.eastmoney.com/rank/
     '''
     def __init__(self) -> None:
-        self.dtdtl = {}
+        self.market = 0 # 1: hk 2: us
+        super().__init__()
+        self.decrypter = None
+        self.page = 1
+        self.headers.update({
+            'Host': 'gbcdn.dfcfw.com',
+            'Referer': 'http://guba.eastmoney.com/'
+        })
 
-    @property
-    def db(self):
-        return MdlDayDtMap
-    
-    @property
-    def dtinfo(self):
-        return StockDtInfo()
+    def getUrl(self):
+        return f'''http://gbcdn.dfcfw.com/rank/popularityList.js?type={self.market}&sort=0&page={self.page}'''
 
-    async def getdtl(self, code, step):
-        dtl = []
-        for i in range(1, step + 1):
-            detail = await query_values(self.db, ['time'], self.db.code == code, self.db.step == i, self.db.success == 1)
-            if len(detail) > 0:
-                ctdate, = detail[-1]
-                if len(dtl) == 0 or ctdate > dtl[0]['date']:
-                    dtl.append({'ct': i, 'date': ctdate})
-        return dtl
+    def getLatestRanks(self, page=1):
+        self.page = page
+        rsp = self.getRequest(self.headers)
+        enrk = rsp.split("'")[1]
 
-    async def start_multi_task(self, mpdate):
-        mxdate = TradingDate.max_trading_date()
-        premap = await self.dumpDataByDate(mpdate)
-        if mpdate is None:
-            mpdate = await query_aggregate('min', self.dtinfo.db, 'time')
-        if premap and premap['date'] != mpdate:
-            logger.info('data invalid %s', premap)
-            return
+        if self.decrypter is None:
+            k = hashlib.md5('getUtilsFromFile'.encode()).hexdigest()
+            iv = 'getClassFromFile'
+            self.decrypter = AesCBCBase64(k, iv)
+        ranks = json.loads(self.decrypter.decrypt(enrk))
+        if ranks is None or len(ranks) == 0:
+            print(rsp)
+            return []
+        return ranks
 
-        if premap is None:
-            premap = []
-        else:
-            premap = premap['data']
-        while mpdate < mxdate:
-            nxdate = TradingDate.next_trading_date(mpdate)
-            nxdt = await self.dtinfo.dumpDataByDate(nxdate)
-            if nxdt is None or nxdate != nxdt['date']:
-                logger.info('dt data for %s not invalid %s', nxdate, nxdt)
-                break
+    def getGbRanks(self, page=1):
+        ''' max page = 5
+        '''
+        ranks = self.getLatestRanks(page)
+        valranks = []
+        for rk in ranks:
+            valranks.append([rk['code'], rk['rankNumber'], float(rk['newFans'])])
+        return valranks
 
-            nmap = []
-            dt1 = [c for c,*_ in nxdt['pool']] if nxdt is not None and 'pool' in nxdt else []
-            for c in dt1:
-                oldmp = False
-                premapbk = []
-                for code, step, suc in premap:
-                    if code == c:
-                        oldmp = True
-                        nmap.append([nxdate, (step + 1 if suc==1 else step), c, 1])
-                    else:
-                        premapbk.append([code, step, suc])
-                if not oldmp:
-                    nmap.append([nxdate, 1, c, 1])
-                premap = premapbk
+    def getEmRanks(self, total=20):
+        url = f'''https://data.eastmoney.com/dataapi/xuangu/list?st=POPULARITY_RANK&sr=1&ps={total}&p=1&sty=SECURITY_CODE,SECURITY_NAME_ABBR,NEW_PRICE,CHANGE_RATE,VOLUME_RATIO,HIGH_PRICE,LOW_PRICE,PRE_CLOSE_PRICE,VOLUME,DEAL_AMOUNT,TURNOVERRATE,POPULARITY_RANK,NEWFANS_RATIO&filter=(POPULARITY_RANK>0)(POPULARITY_RANK<={total})(NEWFANS_RATIO>=0.00)(NEWFANS_RATIO<=100.0)&source=SELECT_SECURITIES&client=WEB'''
+        rsp = Network.fetch_url(url, Network.get_headers({'Host': 'data.eastmoney.com'}))
+        jdata = json.loads(rsp)
+        if jdata['code'] != 0 or 'result' not in jdata or 'data' not in jdata['result']:
+            return []
 
-            for code, step, suc in premap:
-                if code not in self.dtdtl:
-                    self.dtdtl[code] = await self.getdtl(code, step)
+        ranks = []
+        for rk in jdata['result']['data']:
+            ranks.append([rk['SECURITY_CODE'], rk['POPULARITY_RANK'], rk['NEWFANS_RATIO']])
+        return ranks
 
-                dtl = self.dtdtl[code]
-                kd = await self.get_kd_data(code, start=dtl[-1]['date'])
-                if not kd:
-                    continue
-                lkl = [k for k in kd if k.time == nxdate]
-                if len(lkl) != 1:
-                    if lkl[-1].time < nxdate:
-                        ts = await query_one_value(MdlAllStock, MdlAllStock.quit_date, MdlAllStock.code == code, MdlAllStock.typekind == 'TSStock')
-                        if ts is None:
-                            nmap.append([nxdate, (step + 1 if suc==1 else step), code, 0])
-                else:
-                    lkl = lkl[0]
-                    if lkl.time != nxdate:
-                        nmap.append([nxdate, (step + 1 if suc==1 else step), code, 0])
-                    else:
-                        dkl = kd[0]
-                        if lkl.low - dkl.close * 0.9 <= 0:
-                            nmap.append([nxdate, (step + 1 if suc==1 else step), code, 1])
-                        elif lkl.close - dkl.close * 1.08 <= 0 and len(kd) <= 4:
-                            nmap.append([nxdate, (step + 1 if suc==1 else step), code, 0])
+    def get10jqkaRanks(self):
+        # https://basic.10jqka.com.cn/basicph/popularityRanking.html
+        url = 'https://basic.10jqka.com.cn/api/stockph/popularity/top/'
+        rsp = Network.fetch_url(url, Network.get_headers({'Host': 'basic.10jqka.com.cn'}))
+        jdata = json.loads(rsp)
+        if jdata['status_code'] != 0 or 'data' not in jdata or 'list' not in jdata['data']:
+            return []
 
-            self.wkselected = []
-            premap = []
-            for d, step, c, suc in nmap:
-                premap.append([c, step, suc])
-                mp = await query_aggregate('count', self.db, 'code', self.db.time == d, self.db.code == c)
-                if mp == 1:
-                    await upsert_one(self.db, {'time': d, 'code': c, 'step': step, 'success': suc}, ['time', 'code'])
-                else:
-                    self.wkselected.append([d, c, step, suc])
+        ranks = []
+        for rk in jdata['data']['list']:
+            ranks.append([rk['code'], rk['hot_rank']])
+        return ranks
 
-            await self.post_process()
-            mpdate = nxdate
-
-    async def dumpDataByDate(self, date = None):
-        if date is None:
-            date = await query_aggregate('max', self.db, 'time')
-
-        if date is None:
-            return None
-
-        while date <= TradingDate.max_trading_date():
-            mp = await query_values(self.db, ['code', 'step', 'success'], self.db.time == date)
-            if mp is not None and len(mp) > 0:
-                data = {'date': date}
-                dtmap = []
-                for code, step, suc in mp:
-                    dtmap.append([code, step, suc])
-                data['data'] = dtmap
-                return data
-            date = TradingDate.next_trading_date(date)
-
-        return await self.dumpDataByDate()

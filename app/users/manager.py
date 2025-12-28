@@ -108,6 +108,10 @@ class UserManager(BaseUserManager[User, int]):
             async with async_session_maker() as session:
                 result = await session.execute(select(User).where(User.username == acc, User.parent_id == user.id))
                 subaccount = result.scalar_one_or_none()
+                if '.' not in acc and not subaccount:
+                    acc = f'{user.username}.{acc}'
+                    result = await session.execute(select(User).where(User.username == acc, User.parent_id == user.id))
+                    subaccount = result.scalar_one_or_none()
             return subaccount
         if accid:
             async with async_session_maker() as session:

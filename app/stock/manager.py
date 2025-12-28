@@ -16,10 +16,10 @@ from .models import MdlAllStock, MdlStockBk, MdlStockBkMap, MdlSMStats
 from .schemas import PmStock
 from .history import (
     Network, array_to_dict_list,
-    Khistory as khis, FflowHistory as fhis, StockBkMap, StockBkChanges, StockClsBkChanges, StockZtDaily,
+    Khistory as khis, FflowHistory as fhis, StockBkMap, StockBkChanges, StockClsBkChanges,
     StockList)
+from app.selectors import SelectorsFactory as sfac
 from .date import TradingDate
-from .quotes import Quotes as qot
 from .h5 import TransactionStorage as sts
 
 
@@ -48,7 +48,11 @@ class AllStocks:
         if stock.quit_date:
             update_data["quit_date"] = stock.quit_date
 
-        await upsert_one(cls.db, update_data, ["code"])
+        await cls.update_stock(update_data)
+
+    @classmethod
+    async def update_stock(cls, stock: dict):
+        await upsert_one(cls.db, stock, ["code"])
 
     @classmethod
     async def remove(cls, code):
@@ -61,6 +65,10 @@ class AllStocks:
     @classmethod
     async def is_exists(cls, code):
         return code == await query_one_value(cls.db, 'code', cls.db.code == code)
+
+    @classmethod
+    async def get_stock(cls, code):
+        return await query_one_record(cls.db, cls.db.code == code)
 
     @classmethod
     async def update_kline_data(cls, kltype='d', sectype: str = None):
@@ -114,7 +122,11 @@ class AllStocks:
             return
 
         def update_and_save(codes, length, fkl=False):
-            klines = srt.fklines(codes, kltype, 0) if fkl else srt.klines(codes, kltype, length, 0)
+            # tdx = srt.rtsource('tdx')
+            # func = tdx.fklines if fkl else tdx.klines
+            func = srt.fklines if fkl else srt.klines
+            args = (codes, kltype, 0) if fkl else (codes, kltype, length, 0)
+            klines = func(*args)
             for c in klines:
                 if c in stocks:
                     khis.save_kline(c, kltype, klines[c])
@@ -203,7 +215,7 @@ class AllStocks:
         tsize = 1000
         for i in range(0, len(stocks), tsize):
             batch = stocks[i:i+tsize]
-            trans = qot.get_transactions(batch)
+            trans = srt.transactions(batch)
             for k, v in trans.items():
                 if not v:
                     logger.warning(f'no transactions for {k}')
@@ -402,6 +414,10 @@ class AllBlocks:
         bks = await query_values(MdlStockBkMap, MdlStockBkMap.bk, MdlStockBkMap.stock.in_(codes) if union else MdlStockBkMap.stock.all_(codes))
         return [s for s, in bks]
 
+    @classmethod
+    async def get_bk_name(cls, bkcode):
+        return await query_one_value(MdlStockBk, 'name', MdlStockBk.code == bkcode)
+
 
 class StockMarketStats():
     topbks = None
@@ -421,7 +437,7 @@ class StockMarketStats():
             self.bkstocklist[bk] = [to_cls_secucode(c) for c in stocks]
 
         kickdate = TradingDate.prev_trading_date(TradingDate.max_traded_date(), 3) if len(self.topbks.values()) == 0 else min([bk['kickdate'] for bk in self.topbks.values()])
-        szt = StockZtDaily()
+        szt = sfac.get('StockZtDaily')
         ztstks = await szt.get_hot_stocks(kickdate)
         mdate = TradingDate.max_trading_date()
         self.hotstocks = {to_cls_secucode(c): {'code': to_cls_secucode(c), 'date': d, 'days': days, 'lbc': lbc, 'ndays': TradingDate.calc_trading_days(d, mdate) - 1} for c,d,days,lbc in ztstks}

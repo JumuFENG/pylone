@@ -4,6 +4,7 @@
 import pytest
 import sys
 import os
+import asyncio
 
 # 添加项目根目录到路径
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -151,5 +152,14 @@ def main():
 
     return 0
 
+
+async def get_all_with_metadata():
+    info = await SystemSettings.get_all_with_metadata()
+    await SystemSettings.get_all()
+    return info
+
+
 if __name__ == '__main__':
-    sys.exit(main())
+    # sys.exit(main())
+    loop = asyncio.get_event_loop()
+    loop.run_until_complete(get_all_with_metadata())

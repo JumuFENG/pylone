@@ -85,6 +85,20 @@ async def query_aggregate(func_type, model, field, *clauses):
         result = await session.execute(query)
         return result.scalar()
 
+async def query_group_counts(model, field, *clauses):
+    """
+    查询分组计数
+    field: 分组字段名称，如 'category'
+    返回: 字典，键为字段值，值为计数
+    """
+    async with async_session_maker() as session:
+        column = getattr(model, field) if isinstance(field, str) else field
+        query = select(column, func.count()).group_by(column)
+        if clauses:
+            query = query.where(*clauses)
+        result = await session.execute(query)
+        return {row[0]: row[1] for row in result.all()}
+
 def array_to_dict_list(model, arrlist):
     """
     将查询结果转换为字典列表

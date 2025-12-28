@@ -355,6 +355,17 @@ class FflowStorage(H5Storage):
         )
         cls.save_dataset(code, values)
 
+    @classmethod
+    def read_fflow(cls, code, date=None, date1=None):
+        fflow = cls.read_saved_data(code)
+        if fflow is None:
+            return []
+        if date is not None:
+            fflow = fflow[fflow['time'] >= date]
+        if date1 is not None:
+            fflow = fflow[fflow['time'] <= date1]
+        return fflow.tolist()
+
 
 class TransactionStorage(H5Storage):
     saved_dtype = {

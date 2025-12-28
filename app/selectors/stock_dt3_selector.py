@@ -1,9 +1,9 @@
 from typing import Optional
 from app.stock.models import MdlDayDtMap
-from app.stock.history import StockBaseSelector
 from app.stock.date import TradingDate
 from app.db import query_values, upsert_many
 from .models import MdlDt3
+from .stock_base_selector import StockBaseSelector
 
 
 class StockDt3Selector(StockBaseSelector):

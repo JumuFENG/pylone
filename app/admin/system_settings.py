@@ -32,7 +32,7 @@ class SystemSettings:
             MdlSysSettings.value,
             MdlSysSettings.key == key
         )
-        return value if value is not None else default
+        return value or default
 
     @classmethod
     async def set(cls, key: str, value: str) -> None:

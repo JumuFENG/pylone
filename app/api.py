@@ -8,10 +8,12 @@ from app import PostParams, pparam_doc
 from app.hu import img_to_text
 from app.hu.network import Network
 from app.admin.system_settings import SystemSettings
-from .stock.history import Khistory as khis, StockZtDaily, StockDtInfo
+from .stock.history import Khistory as khis, StockDtInfo
 from .stock.date import TradingDate
 from .stock.manager import AllStocks, AllBlocks
 from .stock.router import stock_kline
+from .selectors import SelectorsFactory as sfac, StockZtDaily
+
 
 router = APIRouter(
     prefix="/api",
@@ -25,7 +27,7 @@ async def root():
 
 @router.get("/tradingdates")
 async def tradingdates(len: int = Query(30, gt=0)):
-    return TradingDate.trading_dates[-len:]
+    return TradingDate.recent_trading_dates(len)
 
 @router.get("/stockhist")
 async def stock_hist(
@@ -42,7 +44,7 @@ async def stock_zthist(
     date: str = Query(...),
     concept: str = Query(...),
 ):
-    szi = StockZtDaily()
+    szi: StockZtDaily = sfac.get('StockZtDaily')
     if concept is None:
         return await szi.dump_main_stocks_zt0(date)
     return await szi.dump_by_concept(date, concept)

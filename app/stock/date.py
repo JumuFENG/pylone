@@ -131,6 +131,19 @@ class TradingDate():
         return min(d.strftime('%Y-%m-%d'), cls.max_trading_date())
 
     @classmethod
+    def recent_trading_dates(cls, n):
+        """获取最近N个交易日列表"""
+        dates = [cls.max_trading_date()]
+        d = datetime.datetime.strptime(cls.max_trading_date(), '%Y-%m-%d')
+        while len(dates) < n:
+            d -= datetime.timedelta(days=1)
+            date_str = d.strftime('%Y-%m-%d')
+            if not cls.is_holiday(date_str):
+                dates.append(date_str)
+        dates.reverse()
+        return dates
+
+    @classmethod
     def calc_trading_days(cls, bdate, edate):
         """
         计算两个日期(含)之间的交易日数

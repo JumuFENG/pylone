@@ -6,7 +6,7 @@ from .manager import (
     fastapi_users,
     cookie_auth_backend,
     bearer_auth_backend,
-    current_superuser,
+    verify_user,
     get_user_manager,
     get_current_user_basic
 )
@@ -76,7 +76,7 @@ async def update_user_protected(
 @router.delete("/users/{user_id}", status_code=204, tags=["users"])
 async def delete_user_protected(
     user_id: int,
-    current_user: User = Depends(current_superuser)
+    current_user: User = Depends(fastapi_users.current_user(active=True))
 ):
     """删除用户（仅管理员，保护 ID 为 1 的超级管理员）"""
     if user_id == 1:
@@ -86,7 +86,17 @@ async def delete_user_protected(
         )
 
     async for user_manager in get_user_manager():
-        user = await user_manager.user_db.get(user_id)
+        user = None
+        if current_user.id != user_id and not current_user.is_superuser:
+            user = await user_manager.get_sub_account(current_user, None, user_id)
+            if not user:
+                raise HTTPException(
+                    status_code=403,
+                    detail="无权删除"
+                )
+
+        if user is None:
+            user = await user_manager.user_db.get(user_id)
         if not user:
             raise HTTPException(status_code=404, detail="用户不存在")
 

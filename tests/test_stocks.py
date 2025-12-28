@@ -26,8 +26,13 @@ class TestStocks(unittest.IsolatedAsyncioTestCase):
             print(f'Code: {stock.code}, Name: {stock.name}, Type: {stock.typekind}')
 
     async def test_update_kline_data(self):
-        await AllStocks.update_kline_data(sectype='Index')
-        # AllStocks.update_klines_by_code(['sh000001'])
+        # await AllStocks.update_kline_data(sectype='Index')
+        from app.stock.h5 import KLineStorage as kls
+        # kls.delete_dataset('sz000023', 101)
+        AllStocks.update_klines_by_code(['sz000023'])
+        klines = kls.read_kline_data('sz000023', 101)
+        klines = klines[klines['time'] > '2000-02']
+        print(klines)
 
     async def test_read_kline(self):
         data = await khis.read_kline('sh000001', 'd')
@@ -226,5 +231,5 @@ class TestStocks(unittest.IsolatedAsyncioTestCase):
 if __name__ == '__main__':
     # unittest.main()
     suite = unittest.TestSuite()
-    suite.addTest(TestStocks('test_convert_transactions_to_kline'))
+    suite.addTest(TestStocks('test_update_kline_data'))
     unittest.TextTestRunner().run(suite)
