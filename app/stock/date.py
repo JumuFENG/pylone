@@ -89,7 +89,11 @@ class TradingDate():
         return None, None, None
 
     @classmethod
-    def is_holiday(cls, date):
+    def is_holiday(cls, date=None):
+        if not date:
+            daynow = datetime.datetime.now()
+            date = daynow.strftime('%Y-%m-%d')
+            return date in cls.holidays or daynow.weekday() >= 5
         if date in cls.holidays or datetime.datetime.strptime(date, '%Y-%m-%d').weekday() >= 5:
             return True
         return False

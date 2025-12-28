@@ -13,8 +13,8 @@ from app.lofig import Config, logging
 from app.stock.date import TradingDate
 from app.stock.manager import AllStocks, AllBlocks
 from app.stock.history import Khistory as khis
-from app.stock.history import StockShareBonus, StockChanges, StockZtDaily, StockZtConcepts, StockDtInfo, StockDtMap
-from app.selectors import StockDt3Selector
+from app.stock.history import StockShareBonus, StockChanges, StockZtConcepts, StockDtInfo
+from app.selectors import SelectorsFactory as sfac
 
 logger = logging.getLogger(f'{Config.app_name}.{__package__}')
 
@@ -25,13 +25,8 @@ class DailyUpdater():
     async def update_all(cls):
         logger.info(f"START UPDATING....")
         datetoday = datetime.now()
-        if datetoday.weekday() >= 5:
-            logger.info(f'it is weekend, no data to update. {datetoday.strftime("%Y-%m-%d")}')
-            return
-
-        strtoday = TradingDate.today()
-        if TradingDate.is_holiday(strtoday):
-            logger.info(f"it is holiday, no data to update. {strtoday}")
+        if TradingDate.is_holiday():
+            logger.info(f"Today is holiday, no data to update.")
             return
 
         morningOnetime = False
@@ -49,8 +44,6 @@ class DailyUpdater():
         else:
             # 只在晚上执行的任务
             logger.info("update in the afternoon")
-            # 机构游资龙虎榜，可以间隔，首选晚上更新
-            cls.fetch_dfsorg_stocks()
             # 更新所有股票都日k数据
             await cls.download_all_stocks_khistory()
             # 涨跌停数据，可以间隔，早晚都合适
@@ -88,7 +81,7 @@ class DailyUpdater():
 
         upfailed = []
         for c in allcodes:
-            date = await khis.max_date(c, 'd')
+            date = khis.max_date(c, 'd')
             if TradingDate.calc_trading_days(date, TradingDate.max_trading_date()) > 20:
                 upfailed.append(c)
         if upfailed:
@@ -125,7 +118,7 @@ class DailyUpdater():
             logger.debug(traceback.format_exc())
 
         logger.info('update zt info')
-        ztinfo = StockZtDaily()
+        ztinfo = sfac.get('StockZtDaily')
         await ztinfo.update_pickups()
 
         logger.info('update zt concepts')
@@ -137,36 +130,25 @@ class DailyUpdater():
         await dtinfo.getNext()
 
     @classmethod
-    def fetch_dfsorg_stocks(cls):
-        # dfsorg = StockDfsorg()
-        # try:
-        #     dfsorg.updateDfsorg()
-        # except Exception as e:
-        #     logger.error(e)
-        #     logger.debug(traceback.format_exc())
-        pass
-
-    @classmethod
     async def update_selectors(cls):
-        selectors = [StockDtMap(), StockDt3Selector()]
-        #     StockDztSelector(), StockZt1Selector(), StockZt1WbSelector(), StockCentsSelector(),
-        #     StockMaConvergenceSelector(), StockZdfRanks(), StockZtLeadingSelector(), StockZtLeadingStepsSelector(),
-        #     StockZtLeadingSelectorST(), StockDztStSelector(), StockDztBoardSelector(), StockDztStBoardSelector(),
-        #     StockZdtEmotion(), StockHotStocksRetryZt0Selector(),
-        #     StockZt1BreakupSelector(), StockZt1j2Selector(), StockLShapeSelector(), StockDfsorgSelector(),
-        #     StockTrippleBullSelector(), StockEndVolumeSelector()
-        for sel in selectors:
-            logger.info(f'update { sel.__class__.__name__}')
+        selectors = ['StockDtMap', 'StockDt3Selector',
+        #     'StockDztSelector', 'StockZt1Selector',
+        'StockZt1WbSelector',
+        # 'StockCentsSelector',
+        #     'StockMaConvergenceSelector', 'StockZdfRanks', 'StockZtLeadingSelector', 'StockZtLeadingStepsSelector',
+        #     'StockZtLeadingSelectorST', 'StockDztStSelector', 'StockDztBoardSelector', 'StockDztStBoardSelector',
+        'StockZdtEmotion', 'StockHotStocksRetryZt0Selector',
+        #     'StockZt1BreakupSelector', 'StockZt1j2Selector', 'StockLShapeSelector', 'StockDfsorgSelector',
+        'StockTrippleBullSelector',
+        #     'StockEndVolumeSelector'
+        ]
+        for s in selectors:
+            sel = sfac.get(s)
+            logger.info(f'update {s}')
             await sel.update_pickups()
 
     @classmethod
     async def update_twice_selectors(cls):
-        pass
-
-    @classmethod
-    def update_stock_hotrank(cls):
-        # shr = StockHotRank()
-        # shr.getNext()
         pass
 
     @classmethod

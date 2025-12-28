@@ -5,9 +5,9 @@ import sys
 import os
 import traceback
 import asyncio
-from datetime import datetime, timedelta
+from datetime import datetime
 sys.path.insert(0, os.path.realpath(os.path.dirname(__file__) + '/../..'))
-# from history import StockDfsorg
+
 from app.lofig import Config, logging
 from app.stock.manager import AllStocks
 logger = logging.getLogger(f'{Config.app_name}.{__package__}')
@@ -23,14 +23,11 @@ class MonthlyUpdater():
             await AllStocks.update_kline_data('m', sectype='Index')
             await AllStocks.update_kline_data('m')
             await AllStocks.update_purelost4up()
-
-            logger.info('update dfsorg details')
-            # dfsorg = StockDfsorg()
-            # dfsorg.updateDetails()
         except Exception as e:
             logger.error(e)
             logger.debug(traceback.format_exc())
 
 
 if __name__ == '__main__':
-    asyncio.run(MonthlyUpdater.update_all())
+    loop = asyncio.get_event_loop()
+    loop.run_until_complete(MonthlyUpdater.update_all())
