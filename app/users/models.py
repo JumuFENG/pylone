@@ -59,13 +59,13 @@ class UserCostdog(Base):
 class UcostdogUrque(Base):
     __tablename__ = "ucostdog_urque"
 
+    user_id = Column(Integer, nullable=False)
     ckey = Column(String(20), nullable=False)
     id = Column(Integer, nullable=False)
-    user_id = Column(Integer, nullable=False)
     urdata = Column(String(255))
 
     __table_args__ = (
-        PrimaryKeyConstraint('ckey', 'user_id', name='pk_ucostdog_urque'),
+        PrimaryKeyConstraint('user_id', 'ckey', 'id', name='pk_ucostdog_urque'),
     )
 
 

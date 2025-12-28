@@ -11,6 +11,8 @@ from app.lofig import Config
 from app.db import cfg, engine, Base
 from app.stock.history import Khistory as khis
 from app.stock.h5 import KLineStorage
+from app.users.models import *
+
 cfg['password'] = Config.simple_decrypt(cfg['password'])
 
 
@@ -614,6 +616,84 @@ async def setup_holidays():
 
     await insert_many(MdlHolidays, [{'date': d} for d in holidays] )
 
+
+async def migrate_user_data():
+    tables = [
+        'user_stocks', 'user_strategy', 'user_orders', 'user_full_orders', 'user_costdog', 'ucostdog_urque', 'user_earned', 'user_earning',
+        'user_deals_unknown', 'user_deals_archived', 'user_stock_buy', 'user_stock_sell',
+    ]
+    table_abc = {
+        'user_stocks': {
+            'from_table': 'u%s_stocks',
+        },
+        'user_strategy': {
+            'from_table': 'u%s_strategy',
+        },
+        'user_orders': {
+            'from_table': 'u%s_orders',
+            'cols': {'time': 'date', 'portion': 'count', 'typebs': 'type'}
+        },
+        'user_full_orders': {
+            'from_table': 'u%s_fullorders',
+            'cols': {'time': 'date', 'portion': 'count', 'typebs': 'type'}
+        },
+        'user_earned': {
+            'from_table': 'u%s_earned',
+        },
+        'user_earning': {
+            'from_table': 'u%s_earning',
+            'cols': {'amount': '市值'}
+        },
+        'user_deals_unknown': {
+            'from_table': 'u%s_unknown_deals',
+            'cols': {'time': 'date', 'typebs': 'type', 'sid': '委托编号', 'fee': '手续费', 'feeYh': '印花税', 'feeGh': '过户费'}
+        },
+        'user_deals_archived': {
+            'from_table': 'u%s_archived_deals',
+            'cols': {'time': 'date', 'typebs': 'type', 'sid': '委托编号', 'fee': '手续费', 'feeYh': '印花税', 'feeGh': '过户费'}
+        },
+        'user_stock_buy': {
+            'from_table': 'u%s_buy',
+            'cols': {'time': 'date', 'sid': '委托编号', 'fee': '手续费', 'feeYh': '印花税', 'feeGh': '过户费'}
+        },
+        'user_stock_sell': {
+            'from_table': 'u%s_sell',
+            'cols': {'time': 'date', 'sid': '委托编号', 'fee': '手续费', 'feeYh': '印花税', 'feeGh': '过户费'}
+        },
+        # 'user_costdog': {
+        #     'from_table': 'u%s_costdog',
+        # },
+        # 'ucostdog_urque': {
+        #     'from_table': 'u%s_cdurque',
+        # },
+    }
+    users = {11: 11, 14: 12, 15:13, 16:14}
+    conn = await get_connection()
+    from_dbname = 'stock_center'
+    to_dbname = 'pylone'
+
+    for tbl, tbl_info in table_abc.items():
+        col_mapping = {column.name: column.name for column in Base.metadata.tables.get(tbl).columns}
+        pkcols = [c.name for c in Base.metadata.tables.get(tbl).primary_key.columns]
+        col_mapping['user_id'] = ''
+        if 'cols' in tbl_info:
+            for k, v in tbl_info['cols'].items():
+                col_mapping[k] = v
+        code_idx = None
+        cols = list(col_mapping.keys())
+        if 'code' in col_mapping:
+            code_idx = cols.index('code') - 1
+        ukeys = [cols.index(k) for k in pkcols]
+        for uid_old, uid_new in users.items():
+            from_tbl = tbl_info['from_table'] % uid_old
+            def transform_func(row):
+                if code_idx is not None:
+                    return (uid_new,) + row[:code_idx] + (row[code_idx].lower(),) + row[code_idx + 1:]
+                else:
+                    return (uid_new,) + row
+            await migrate_table(conn, from_dbname, to_dbname, from_tbl, tbl, col_mapping, unique_keys=ukeys, transform_func=transform_func)
+
+
 if __name__ == '__main__':
     loop = asyncio.get_event_loop()
     # loop.run_until_complete(migrate_table_as_is('testdb', 'pylone', 'stock_bks', unique_keys=['code']))
@@ -629,4 +709,5 @@ if __name__ == '__main__':
     # loop.run_until_complete(migrate_day_zt_stocks('day_zt_stocks_st', mkt=3))
     # loop.run_until_complete(migrate_day_zt_concepts())
     # loop.run_until_complete(migrate_day_dt_stocks())
-    loop.run_until_complete(migrate_stock_dt_map())
+    # loop.run_until_complete(migrate_stock_dt_map())
+    loop.run_until_complete(migrate_user_data())
