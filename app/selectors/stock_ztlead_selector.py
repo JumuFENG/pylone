@@ -175,7 +175,7 @@ class StockZtDaily(StockBaseSelector):
         if date is None:
             date = await query_aggregate('max', self.db, 'time')
 
-        await query_values(self.db, ['code', 'bk', 'cpt'], self.db.time == date, self.db.lbc == 1, self.db.mkt == 0)
+        return await query_values(self.db, ['code', 'bk', 'cpt'], self.db.time == date, self.db.lbc == 1, self.db.mkt == 0)
 
     async def dump_by_concept(self, date, concept):
         if date is None:
@@ -198,10 +198,10 @@ class StockZtDaily(StockBaseSelector):
                     ztcpt.append([c, n, bk, con])
             return unify_concepts(ztcpt)
         return unify_concepts(zts)
-    
+
     async def dumpDataByDate(self, date=None):
         return await self.dump_main_stocks_zt0(date)
-    
+
     async def dumpZtStocksInDays(self, n=3, fullcode=True):
         date = await query_aggregate('max', self.db, 'time')
         date = TradingDate.prev_trading_date(date, n)
@@ -216,7 +216,7 @@ class StockZtDaily(StockBaseSelector):
         '''
         sdate = TradingDate.prev_trading_date(TradingDate.max_traded_date(), days)
         dsteps = await query_group_counts(self.db, 'time', self.db.time > sdate, self.db.lbc >= minstep, self.db.mkt == 0)
-        return dsteps.items()
+        return [[t, c] for t, c in dsteps.items()]
 
 
 class StockZdtEmotion(StockBaseSelector):
@@ -277,7 +277,7 @@ class StockZdtEmotion(StockBaseSelector):
         if date is None:
             date = await query_aggregate('max', self.db, 'date')
         rows = await query_values(self.db, None, self.db.date >= date)
-        return rows
+        return [list(row) for row in rows]
 
     async def dumpDataInDays(self, days):
         return await self.dumpDataByDate(TradingDate.prev_trading_date(TradingDate.max_traded_date(), days-1))

@@ -179,7 +179,7 @@ class Quotes:
             new_transactions = srt.transactions(uncached_codes, start=cls._cached_transaction_time(uncached_codes))
             date = TradingDate.max_trading_date()
             for c,v in new_transactions.items():
-                new_transactions[c] = [[f'{date} {t[0]}'] + t[1:] for t in v]
+                new_transactions[c] = [[t[0] if ' ' in t[0] else f'{date} {t[0]}'] + t[1:] for t in v]
             ttl_cachedata = {c: v[-1][0] for c,v in new_transactions.items() if len(v) > 0}
             result = cls._cache_and_merge_data(
                 result, ttl_cachedata, 'trans', cache_duration

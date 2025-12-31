@@ -106,13 +106,18 @@ async def stock_get(
             wbtbl = sfac.get('StockZt1WbSelector')
             z1stks = await wbtbl.dumpDataByDate()
             td = TradingDate.max_traded_date()
-            return [x[0] for x in z1stks if x[1] == td]
+            return [x[1] for x in z1stks if x[0] == td]
         elif key == 'istrategy_3brk':
             s3btbl = sfac.get('StockTrippleBullSelector')
             return await s3btbl.getDaysCandidatesHighLow(days, True)
         elif key == 'istrategy_hsrzt0':
             shs = sfac.get('StockHotStocksRetryZt0Selector')
             return await shs.dumpDataByDate()
+        elif key == 'istrategy_hotrank0':
+            # hotranktbl = StockHotrank0Selector()
+            # rked5d = hotranktbl.getRanked(TradingDate.max_traded_date())
+            # return rked5d
+            return []
         raise HTTPException(404, detail=f"Unknown istrategy key: {key}")
     if act in ("watchings", ):
         user = await verify_user(basic_user or bearer_user, acc, accid)

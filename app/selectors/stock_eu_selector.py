@@ -46,11 +46,11 @@ class StockTrippleBullSelector(StockBaseSelector):
                 pops.append(c)
         [ncodes.pop(c) for c in pops]
         self.nonefdates = ncodes
-        super().task_prepare(max(xcodes.values()))
+        await super().task_prepare(max(xcodes.values()))
         wkstocks = []
         for c,d in self.wkstocks:
             if c in ncodes:
-                fdate = self.check_nonfinished(c, ncodes[c])
+                fdate = await self.check_nonfinished(c, ncodes[c])
                 if fdate is not None:
                     wkstocks.append([c, fdate])
                     xcodes[c] = fdate
@@ -157,7 +157,7 @@ class StockTrippleBullSelector(StockBaseSelector):
                         self.upstocks.append([fdate, c, self.nonefdates[c]])
                     else:
                         self.upstocks.append([allkl[i-2].time, c, self.nonefdates[c]])
-                        self.wkselected.append([c, allkl[i].time, 1, allkl[i-2].time, fdate])
+                        self.wkselected.append([allkl[i].time, c, 1, allkl[i-2].time, fdate])
                     self.maxfdates[c] = fdate
                     i = j
                     continue
@@ -166,12 +166,12 @@ class StockTrippleBullSelector(StockBaseSelector):
                     self.maxfdates[c] = fdate
                 if c in self.nonefdates and self.nonefdates[c] != allkl[i].time:
                     self.upstocks.append([allkl[i-2].time, c, self.nonefdates[c]])
-                self.wkselected.append([c, allkl[i].time, 1, allkl[i-2].time, fdate])
+                self.wkselected.append([allkl[i].time, c, 1, allkl[i-2].time, fdate])
             i = j
 
     async def post_process(self):
         await upsert_many(self.db, [dict(zip(['fdate', 'code', 'date'], x)) for x in self.upstocks], ['code', 'date'])
-        await super().post_process()
+        await super().post_process(update=True)
 
     async def dumpDataByDate(self, date: Optional[str] = None):
         cond = [self.db.prepk == 1, self.db.fdate == None]

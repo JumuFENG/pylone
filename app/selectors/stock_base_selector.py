@@ -8,7 +8,7 @@ from app.stock.models import MdlAllStock
 from app.stock.date import TradingDate
 from app.stock.history import Khistory
 from app.stock.schemas import KNode
-from app.db import query_values, query_aggregate, insert_many, or_, array_to_dict_list
+from app.db import query_values, query_aggregate, insert_many, upsert_many, or_, array_to_dict_list
 
 
 class StockBaseSelector():
@@ -33,7 +33,7 @@ class StockBaseSelector():
             self.wkstocks = [[c, date] for c, in stks]
         self.wkselected = []
 
-    async def post_process(self) -> None:
+    async def post_process(self, update=False) -> None:
         """后处理"""
         if len(self.wkselected) > 0:
             uniq_fields = []
@@ -43,7 +43,10 @@ class StockBaseSelector():
                 uniq_fields.append('time')
             elif hasattr(self.db, 'date'):
                 uniq_fields.append('date')
-            await insert_many(self.db, array_to_dict_list(self.db, self.wkselected), uniq_fields)
+            if update:
+                await upsert_many(self.db, array_to_dict_list(self.db, self.wkselected), uniq_fields)
+            else:
+                await insert_many(self.db, array_to_dict_list(self.db, self.wkselected), uniq_fields)
 
     async def task_processing(self, item) -> None:
         """任务处理逻辑"""

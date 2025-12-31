@@ -473,7 +473,8 @@ class StockShareBonus(EmDataCenterRequest):
     async def dividenDetailsLaterThan(self, date=None):
         if date is None:
             date = TradingDate.today()
-        return await query_values(self.db, None, MdlStockShare.register_date > date)
+        ddtl = await query_values(self.db, None, MdlStockShare.register_date > date)
+        return [list(row) for row in ddtl]
 
     async def getBonusHis(self, code):
         return await query_values(self.db, None, MdlStockShare.code == code)

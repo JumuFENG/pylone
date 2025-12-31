@@ -59,13 +59,13 @@ class StockHotStocksRetryZt0Selector(StockBaseSelector):
                 allkl = await self.get_kd_data(c, TradingDate.prev_trading_date(d, days*2), fqt=1)
                 lbc, fdate, ldate = self.check_lbc(allkl)
                 if lbc >= step and ldate != d and fdate < d:
-                    days = len([d for x in allkl if x.date >= fdate and x.date <= ldate])
+                    days = len([d for x in allkl if x.time >= fdate and x.time <= ldate])
                     await upsert_one(self.db, {'code': c, 'date': ldate, 'days': days, 'step': lbc, 'remdays': 66}, ['code', 'date'])
                     self.wkstocks.append((c,ldate,days,lbc,66))
                     continue
                 if lbc >= 3 and ldate != d:
                     await upsert_one(self.db, {'code': c, 'date': d, 'remdays': 0, 'dropdate': fdate}, ['code', 'date'])
-                    days = len([d for x in allkl if x.date >= fdate and x.date <= ldate])
+                    days = len([d for x in allkl if x.time >= fdate and x.time <= ldate])
                     self.wkstocks.append((c,ldate,days,lbc,66))
                     logger.info(f'lbc >= 3, drop old record and add new record {c} {lbc} {fdate} {ldate}')
                     continue
@@ -79,7 +79,7 @@ class StockHotStocksRetryZt0Selector(StockBaseSelector):
         lbc, fid, lid = 0, 0, 0
         mxlbc, mxfid, mxlid = 0, 0, 0
         for i in range(0, len(allkl)):
-            if round(allkl[i].pchange) >= 10 and allkl[i].high == allkl[i].close:
+            if round(allkl[i].change) >= 0.1 and allkl[i].high == allkl[i].close:
                 if lbc == 0:
                     fid = i
                 lbc += 1
@@ -94,30 +94,30 @@ class StockHotStocksRetryZt0Selector(StockBaseSelector):
             mxlbc = lbc
             mxfid = fid
             mxlid = lid
-        return mxlbc, allkl[mxfid].date, allkl[mxlid].date
+        return mxlbc, allkl[mxfid].time, allkl[mxlid].time
 
     async def task_processing(self, item):
         c,d,days,step,rdays = item
         allkl = await self.get_kd_data(c, TradingDate.prev_trading_date(d, days), fqt=1)
-        post_days = len([x for x in allkl if x.date > d])
+        post_days = len([x for x in allkl if x.time > d])
         if post_days < 66:
             self.wkselected.append([d,c,days,step,66-post_days,''])
             return
         i = 0
-        while i < len(allkl) and allkl[i].date < d:
+        while i < len(allkl) and allkl[i].time < d:
             i += 1
-        if not any([round(x.pchange) >= 10 and x.high == x.close for x in allkl if x.date > d and allkl.index(x) - i < 66]):
-            self.wkselected.append([d,c,days,step,0,allkl[i+66].date])
+        if not any([round(x.change) >= 0.1 and x.high == x.close for x in allkl if x.time > d and allkl.index(x) - i < 66]):
+            self.wkselected.append([d,c,days,step,0,allkl[i+66].time])
             return
         last_zid = i + 66
         while last_zid > i:
-            if round(allkl[last_zid].pchange) >= 10 and allkl[last_zid].high == allkl[last_zid].close:
+            if round(allkl[last_zid].change) >= 0.1 and allkl[last_zid].high == allkl[last_zid].close:
                 break
             last_zid -= 1
         fianal_zid = max(last_zid + 22, i + 66)
         while fianal_zid < len(allkl):
             while fianal_zid > last_zid:
-                if round(allkl[fianal_zid].pchange) >= 10 and allkl[fianal_zid].high == allkl[fianal_zid].close:
+                if round(allkl[fianal_zid].change) >= 0.1 and allkl[fianal_zid].high == allkl[fianal_zid].close:
                     break
                 fianal_zid -= 1
             if fianal_zid > last_zid:
@@ -129,11 +129,17 @@ class StockHotStocksRetryZt0Selector(StockBaseSelector):
         if fianal_zid >= len(allkl):
             self.wkselected.append([d,c,days,step,fianal_zid - len(allkl) + 1, ''])
         else:
-            self.wkselected.append([d,c,days,step,0,allkl[fianal_zid].date])
+            self.wkselected.append([d,c,days,step,0,allkl[fianal_zid].time])
+
+    async def post_process(self, update=False):
+        return await super().post_process(True)
 
     async def dumpDataByDate(self, date=None):
         if date is None:
             date = await query_aggregate('max', self.db, 'date')
+            if date is None:
+                return []
         ldate = TradingDate.prev_trading_date(date, 2)
-        return await query_values(self.db, ['date', 'code', 'days', 'step'], self.db.date < ldate, self.db.remdays > 0)
+        rdcds = await query_values(self.db, ['date', 'code', 'days', 'step'], self.db.date < ldate, self.db.remdays > 0)
+        return [list(row) for row in rdcds]
 

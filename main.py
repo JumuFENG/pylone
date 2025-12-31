@@ -1,5 +1,5 @@
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, Request, Depends
+from fastapi import FastAPI, Request, Depends, Query
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from fastapi.responses import RedirectResponse
@@ -68,6 +68,11 @@ async def settings_redirect():
 @app.get("/userbind")
 async def userbind_redirect():
     return RedirectResponse(url="/users/bind")
+
+@app.get("/stock_fflow")
+async def stock_fflow_redirect(code: str = Query(...), date: str = Query(None)):
+    from app.stock.router import stock_fflow
+    return await stock_fflow(code, date)
 
 
 if __name__ == '__main__':

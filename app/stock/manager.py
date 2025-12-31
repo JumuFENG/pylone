@@ -213,17 +213,25 @@ class AllStocks:
             return
 
         tsize = 1000
+        date = TradingDate.max_trading_date()
+        tdx = srt.rtsource('tdx')
+        ofmt = srt.set_array_format('list')
         for i in range(0, len(stocks), tsize):
             batch = stocks[i:i+tsize]
-            trans = srt.transactions(batch)
+            trans = tdx.transactions(batch)
             for k, v in trans.items():
-                if not v:
+                if v is None:
                     logger.warning(f'no transactions for {k}')
                     continue
+                if len(v) < 10:
+                    logger.warning(f'not enough transactions for {k} {v}')
+                    continue
                 cols = ['time', 'price', 'volume', 'num', 'bs'] if len(v[0]) == 5 else ['time', 'price', 'volume', 'bs']
-                nptrans = np.array([tuple(v_) for v_ in v], [(c, sts.restore_dtype.get(c, 'float64')) for c in cols])
+                trdata = [tuple([t[0] if ' ' in t[0] else f'{date} {t[0]}'] + t[1:]) for t in v]
+                nptrans = np.array(trdata, [(c, sts.restore_dtype.get(c, 'float64')) for c in cols])
                 sts.save_dataset(k, nptrans)
             logger.info(f'saved transactions for stocks: {i} - {i+len(batch)} / {len(stocks)}')
+        srt.set_array_format(ofmt)
 
     @classmethod
     async def is_quited(cls, code):
