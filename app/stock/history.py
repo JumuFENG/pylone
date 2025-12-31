@@ -69,13 +69,14 @@ class Khistory:
 
     @classmethod
     def count_bars_to_updated(cls, code, kltype=101):
-        if srt.to_int_kltype(kltype) not in kls.saved_kline_types:
+        kltype = srt.to_int_kltype(kltype)
+        if kltype not in kls.saved_kline_types:
             return 0
         guessed = cls.guess_bars_since(cls.max_date(code, kltype), kltype)
         if guessed == sys.maxsize:
             return guessed
         if not TradingDate.trading_ended():
-            guessed -= 1
+            guessed -= (1 if kltype > 100 and kltype%15 != 0 else 240/kltype)
         return max(guessed, 0)
 
     @classmethod

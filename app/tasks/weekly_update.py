@@ -32,10 +32,14 @@ class WeeklyUpdater():
                 usm.forget_stocks(u)
             ustks = await usm.watching_stocks(u)
             for c in ustks:
-                if not await AllStocks.is_quited(c):
-                    allcodes.append(c)
-                else:
+                stkrec = await AllStocks.get_stock(c)
+                if not stkrec:
+                    continue
+                if stkrec.typekind == 'TSStock' or stkrec.quit_date:
                     await usm.forget_stock(u, c)
+                    continue
+                if stkrec.typekind in ('ETF', 'LOF', 'ABStock', 'BJStock'):
+                    allcodes.append(c)
         stocks = list(set(allcodes))
         AllStocks.update_klines_by_code(stocks, 'w')
         await cls.update_holidays()

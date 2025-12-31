@@ -40,8 +40,9 @@ async def update_bkchanges_history():
 
 async def update_stock_transactions():
     try:
-        await AllStocks.update_stock_transactions()
-        logger.info('stock transactions updated!')
+        if SystemSettings.get('daily_trans', '0') == '1':
+            logger.info('update stock transactions')
+            await AllStocks.update_stock_transactions()
     except Exception as e:
         logger.error(f'Error updating stock transactions: {e}')
         logger.debug(format_exc())

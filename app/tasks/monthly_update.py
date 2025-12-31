@@ -23,6 +23,7 @@ class MonthlyUpdater():
             await AllStocks.update_kline_data('m', sectype='Index')
             await AllStocks.update_kline_data('m')
             await AllStocks.update_purelost4up()
+            await AllStocks.load_all_funds()
         except Exception as e:
             logger.error(e)
             logger.debug(traceback.format_exc())

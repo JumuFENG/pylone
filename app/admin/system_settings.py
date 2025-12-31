@@ -172,7 +172,8 @@ class SystemSettings:
             ('bkchanges_update_realtime', '1', '板块异动', SettingValueType.BOOLEAN),
             ('daily_15min', '1', '15分钟', SettingValueType.BOOLEAN),
             ('daily_5min', '0', '5分钟', SettingValueType.BOOLEAN),
-            ('daily_1min', '1', '1分钟', SettingValueType.BOOLEAN),
+            ('daily_1min', '0', '1分钟', SettingValueType.BOOLEAN),
+            ('daily_trans', '1', '逐笔', SettingValueType.BOOLEAN),
         ]
 
         for key, value, name, valtype in defaults:

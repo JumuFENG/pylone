@@ -8,13 +8,9 @@ from typing import Optional, List, Callable, Union, Tuple
 from app.lofig import Config, logging
 from app.hu import delay_seconds
 from app.admin.system_settings import SystemSettings
-from app.stock.models import MdlSysSettings
 from app.stock.date import TradingDate
 from app.stock.manager import AllBlocks, StockMarketStats
-from app.db import query_one_value, upsert_one
-from .trade_opening import (
-    stock_market_opening_task,
-    bk_changes_prepare_task,)
+from .trade_opening import bk_changes_prepare_task
 from .trade_closed import (
     update_daily_trade_closed_history,
     save_earning_task, update_stock_transactions,
@@ -210,6 +206,9 @@ class Timers:
 
     @classmethod
     def weekly_should_run(cls, lastrun, now):
+        if not TradingDate.is_holiday() and not TradingDate.trading_ended():
+            return False
+
         if lastrun is None or lastrun == '':
             return True
 
@@ -226,6 +225,9 @@ class Timers:
 
     @classmethod
     def monthly_should_run(cls, lastrun, now):
+        if not TradingDate.is_holiday() and not TradingDate.trading_ended():
+            return False
+
         if lastrun is None or lastrun == '':
             return True
 
@@ -282,14 +284,15 @@ class Timers:
 
     @classmethod
     def setup(cls):
+        if Config.client_config().get('disable_timers', False):
+            return
         logger.info(f"设置定时任务")
         if TradingDate.is_trading_date(TradingDate.today()):
             cls.schedule_trading_tasks()
-            cls.add_timer_task(stock_market_opening_task, '9:25:00', '15:00:00')
+            cls.add_timer_task(bk_changes_prepare_task, '9:16:00', '9:30:00')
+            cls.add_timer_task(update_bkchanges_history, '15:01:04')
+            cls.add_timer_task(update_stock_transactions, '15:33:05')
+            cls.add_timer_task(save_earning_task, '15:02:03')
             cls.add_timer_task(update_daily_trade_closed_history, '15:01:00')
         cls.add_timer_task(cls.run_regular_tasks, '8:47:00', '9:11:00')
-        cls.add_timer_task(bk_changes_prepare_task, '9:16:00', '9:30:00')
         cls.add_timer_task(cls.run_regular_tasks, '16:58:00', '23:59:00')
-        cls.add_timer_task(update_bkchanges_history, '15:01:04')
-        cls.add_timer_task(update_stock_transactions, '15:33:05')
-        cls.add_timer_task(save_earning_task, '15:02:03')

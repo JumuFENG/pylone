@@ -8,6 +8,7 @@ import asyncio
 from datetime import datetime
 sys.path.insert(0, os.path.realpath(os.path.dirname(__file__) + '/../..'))
 from app.admin.router import admin_user_list
+from app.admin.system_settings import SystemSettings
 from app.users.manager import UserStockManager as usm
 from app.lofig import Config, logging
 from app.stock.date import TradingDate
@@ -65,22 +66,29 @@ class DailyUpdater():
     async def download_all_stocks_khistory(cls):
         logger.info('start download_all_stocks_khistory')
         all_users = await admin_user_list(None)
-        allcodes = []
+        stkcodes = []
+        fundcodes = []
         for u in all_users:
             if u.realcash == 0:
                 usm.forget_stocks(u)
             ustks = await usm.watching_stocks(u)
             for c in ustks:
-                if not AllStocks.is_quited(c):
-                    allcodes.append(c)
-                else:
+                stkrec = await AllStocks.get_stock(c)
+                if not stkrec:
+                    continue
+                if stkrec.typekind == 'TSStock' or stkrec.quit_date:
                     await usm.forget_stock(u, c)
+                    continue
+                if stkrec.typekind == 'ETF' or stkrec.typekind == 'LOF':
+                    fundcodes.append(c)
+                elif stkrec.typekind == 'ABStock' or stkrec.typekind == 'BJStock':
+                    stkcodes.append(c)
 
-        allcodes = list(set(allcodes))
-        AllStocks.update_klines_by_code(allcodes, 'd')
+        stkcodes = list(set(stkcodes))
+        AllStocks.update_klines_by_code(stkcodes, 'd')
 
         upfailed = []
-        for c in allcodes:
+        for c in stkcodes:
             date = khis.max_date(c, 'd')
             if TradingDate.calc_trading_days(date, TradingDate.max_trading_date()) > 20:
                 upfailed.append(c)
@@ -88,7 +96,24 @@ class DailyUpdater():
             logger.info(f'stocks update failed: {upfailed}')
             await AllStocks.check_stock_quit(upfailed)
 
-        logger.info('download_all_stocks_khistory done! %d' % len(allcodes))
+        logger.info('download all stocks khistory done! %d' % len(stkcodes))
+
+        AllStocks.update_klines_by_code(fundcodes, 'd')
+        logger.info('funds history updated!')
+        if await SystemSettings.get('daily_15min', '0') == '1':
+            logger.info('update fund 15min history')
+            AllStocks.update_klines_by_code(fundcodes, 15)
+        if await SystemSettings.get('daily_5min', '0') == '1':
+            logger.info('update fund 5min history')
+            AllStocks.update_klines_by_code(fundcodes, 5)
+        if await SystemSettings.get('daily_1min', '0') == '1':
+            logger.info('update fund 1min history')
+            AllStocks.update_klines_by_code(fundcodes, 1)
+        if await SystemSettings.get('daily_trans', '0') == '1':
+            logger.info('update daily transactions')
+            AllStocks.update_transactions_by_code(fundcodes)
+
+        logger.info('download all funds khistory done! %d' % len(fundcodes))
 
     @classmethod
     async def update_new_stocks(cls):
@@ -142,6 +167,7 @@ class DailyUpdater():
         'StockTrippleBullSelector',
         #     'StockEndVolumeSelector'
         ]
+        # selectors = ['StockHotStocksRetryZt0Selector']
         for s in selectors:
             sel = sfac.get(s)
             logger.info(f'update {s}')

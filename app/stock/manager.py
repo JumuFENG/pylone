@@ -207,6 +207,10 @@ class AllStocks:
             return
         rows = await query_values(cls.db)
         stocks = [r.code for r in rows if r.code.startswith(('sh', 'sz', 'bj')) and r.typekind in ('ABStock', 'BJStock') and (r.setup_date is None or r.setup_date <= TradingDate.max_trading_date())]
+        cls.update_transactions_by_code(stocks)
+
+    @classmethod
+    def update_transactions_by_code(cls, stocks: list = None):
         stocks = [s for s in stocks if sts.max_date(s) < TradingDate.max_trading_date()]
         if not stocks:
             logger.info('no stocks need to update transactions')
@@ -293,7 +297,7 @@ class AllStocks:
         await upsert_many(cls.db, astocks, ['code'], 3000)
 
     @classmethod
-    async def get_bkstocks(self, bks):
+    def get_bkstocks(self, bks):
         if isinstance(bks, str):
             bks = [bks]
         bks = ','.join(['b:' + bk for bk in bks])
@@ -382,7 +386,7 @@ class AllBlocks:
 
         cls.bkmap.setCode(code)
         if code.startswith('BK'):
-            cls.bkmap.bkstocks = await AllStocks.get_bkstocks(code)
+            cls.bkmap.bkstocks = AllStocks.get_bkstocks(code)
             await cls.bkmap.saveFetched()
         else:
             await cls.bkmap.getNext()
