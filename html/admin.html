@@ -26,6 +26,7 @@
                     <tr>
                         <th>ID</th>
                         <th>用户名</th>
+                        <th>显示名</th>
                         <th>邮箱</th>
                         <th>状态</th>
                         <th>验证</th>
@@ -45,6 +46,10 @@
                         <div style="display: flex;">
                             <label for="newUserUsername">用户名 *</label>
                             <input type="text" id="newUserUsername" name="username" required style="width: 60%;height: 30px;">
+                        </div>
+                        <div style="display: flex;">
+                            <label for="newUserNickname">显示名</label>
+                            <input type="text" id="newUserNickname" name="nickname" required style="width: 60%;height: 30px;">
                         </div>
                         <div style="display: flex;">
                             <label for="newUserEmail">邮箱 *</label>
@@ -128,6 +133,7 @@
                     row.innerHTML = `
                         <td>${user.id}</td>
                         <td>${user.username || '-'}</td>
+                        <td>${user.nickname || user.username || '-'}</td>
                         <td>${user.email}</td>
                         <td>${user.is_active ? '<span class="badge badge-success">激活</span>' : '<span class="badge badge-danger">未激活</span>'}</td>
                         <td>${user.is_verified ? '<span class="badge badge-success">已验证</span>' : '<span class="badge badge-warning">未验证</span>'}</td>
@@ -201,6 +207,7 @@
 
             const email = document.getElementById('newUserEmail').value;
             const username = document.getElementById('newUserUsername').value;
+            const nickname = document.getElementById('newUserNickname').value;
             const password = document.getElementById('newUserPassword').value;
             const is_active = document.getElementById('newUserIsActive').checked;
             const is_verified = document.getElementById('newUserIsVerified').checked;
@@ -212,6 +219,7 @@
                 const userData = {
                     email,
                     username,
+                    nickname,
                     password,
                     is_active,
                     is_verified,

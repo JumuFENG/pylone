@@ -24,7 +24,7 @@
 
                 <div id="userInfo" class="d-none">
                     <div class="nav-links hover-actions" style="display: flex;flex-direction: row-reverse;">
-                        <a id="editBtn" href="#" onclick="toggleEdit()">修改密码</a>
+                        <a id="editBtn" href="#" onclick="toggleEdit()">修改</a>
                         <a id="saveBtn" href="#" style="display: none;" onclick="saveChanges()">保存</a>
                         <a id="cancelBtn" href="#" style="color: #aaa; display: none;" onclick="cancelEdit()">取消</a>
                     </div>
@@ -33,6 +33,9 @@
                         <p class="d-flex"><strong>用户ID:</strong> <span id="userId" style="width: 250px;"></span></p>
                         <p class="d-flex"><strong>邮箱:</strong> <span id="userEmailDisplay" style="width: 250px;"></span></p>
                         <p class="d-flex"><strong>用户名:</strong> <span id="userNameDisplay" style="width: 250px;"></span></p>
+                        <p class="d-flex"><strong>昵称:</strong> <span >
+                            <input type="text" id="userNicknameInput" placeholder="留空则不修改" disabled style="width: 250px;">
+                        </span></p>
                         <p id="passwordRow" class="d-flex" style="display: none;">
                             <strong>新密码:</strong>
                             <input type="password" id="userPasswordInput" placeholder="至少6位,留空则不修改" minlength="6" style="width: 250px;">
@@ -51,6 +54,7 @@
                             <tr>
                                 <th>ID</th>
                                 <th>用户名</th>
+                                <th>显示名</th>
                                 <th>邮箱</th>
                                 <th>状态</th>
                                 <th>验证</th>
@@ -68,6 +72,8 @@
                         <div style="display: flex; align-items: center; justify-content: space-between;">
                             <label for="newUserUsername">用户名 *</label>
                             <input type="text" id="newUserUsername" name="username" required="" style="width: 150px;height: 30px;">
+                            <label for="newUserNickname">显示名</label>
+                            <input type="text" id="newUserNickname" name="nickname" style="width: 150px;height: 30px;">
                             <label style="margin: 0;">
                                 资金类型
                                 <select name="realcash" id="newUserRealcash" style="width: 150px;height: 30px;">
@@ -101,6 +107,7 @@
                 document.getElementById('userId').textContent = currentUser.id;
                 document.getElementById('userEmailDisplay').textContent = currentUser.email;
                 document.getElementById('userNameDisplay').textContent = currentUser.username || '未设置';
+                document.getElementById('userNicknameInput').value = currentUser.nickname || '未设置';
                 document.getElementById('userActive').innerHTML = currentUser.is_active
                     ? '<span class="badge badge-success">激活</span>'
                     : '<span class="badge badge-danger">未激活</span>';
@@ -156,6 +163,7 @@
                 row.innerHTML = `
                     <td>${user.id}</td>
                     <td>${user.username || '-'}</td>
+                    <td>${user.nickname || user.username || '-'}</td>
                     <td>${user.email}</td>
                     <td>${user.is_active ? '<span class="badge badge-success">激活</span>' : '<span class="badge badge-danger">未激活</span>'}</td>
                     <td>${user.is_verified ? '<span class="badge badge-success">已验证</span>' : '<span class="badge badge-warning">未验证</span>'}</td>
@@ -185,7 +193,21 @@
             document.getElementById('cancelBtn').style.display = 'inline-block';
 
             // 切换显示/输入模式
+            document.getElementById('userNicknameInput').value = '';
+            document.getElementById('userNicknameInput').disabled = false;
             document.getElementById('passwordRow').style.display = 'flex';
+        }
+
+        async function confirmDelete(userId, email) {
+            if (confirm(`确定要删除用户 ${email} 吗？此操作不可恢复！`)) {
+                try {
+                    await deleteUser(userId);
+                    showSuccess('用户已删除');
+                    setTimeout(() => loadSubAccounts(), 1000);
+                } catch (error) {
+                    showError(error.message);
+                }
+            }
         }
 
         function cancelEdit() {
@@ -197,9 +219,11 @@
             document.getElementById('cancelBtn').style.display = 'none';
 
             // 恢复原始值
+            document.getElementById('userNicknameInput').value = currentUser.nickname || '未设置';
             document.getElementById('userPasswordInput').value = '';
 
             // 切换显示/输入模式
+            document.getElementById('userNicknameInput').disabled = true;
             document.getElementById('passwordRow').style.display = 'none';
         }
 
@@ -213,6 +237,11 @@
                     return;
                 }
                 updateData.password = newPassword;
+            }
+
+            const newNickName = document.getElementById('userNicknameInput').value;
+            if (newNickName && newNickName !== currentUser.nickname) {
+                updateData.nickname = newNickName;
             }
 
             if (Object.keys(updateData).length === 0) {
@@ -244,6 +273,7 @@
             }
             const email = document.getElementById('newUserEmail').value || username + '@' + currentUser.username + '.com';
             username = currentUser.username + '.' + username;
+            const nickname = document.getElementById('newUserNickname').value || username;
             const password = document.getElementById('newUserPassword').value || '123456';
             const is_active = true;
             const is_verified = true;
@@ -255,6 +285,7 @@
                 const userData = {
                     email,
                     username,
+                    nickname,
                     password,
                     is_active,
                     is_verified,

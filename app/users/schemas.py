@@ -4,16 +4,19 @@ from pydantic import Field, BaseModel
 
 class UserRead(schemas.BaseUser[int]):
     username: str
+    nickname: Optional[str]
     parent_id: Optional[int]
     realcash: Optional[int]
 
 class UserCreate(schemas.BaseUserCreate):
     username: str
+    nickname: Optional[str] = None
     parent_id: Optional[int] = None
     realcash: Optional[int] = 0
 
 class UserUpdate(schemas.BaseUserUpdate):
     username: Optional[str] = None
+    nickname: Optional[str] = None
     parent_id: Optional[int] = None
     realcash: Optional[int] = None
 

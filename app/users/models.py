@@ -8,6 +8,7 @@ class User(SQLAlchemyBaseUserTable, Base):
 
     id = Column(Integer, primary_key=True)
     username = Column(String(50), unique=True, nullable=False)
+    nickname = Column(String(50), nullable=True)
     parent_id = Column(Integer, nullable=True)
     realcash = Column(SmallInteger, nullable=False, default=1)
 
