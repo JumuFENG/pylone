@@ -78,3 +78,16 @@ class Mdl3Bull(Base):
     __table_args__ = (
         PrimaryKeyConstraint('code', 'date', name='pk_3bull'),
     )
+
+class MdlZtLead(Base):
+    __tablename__ = "stock_zt_lead_pickup"
+
+    date = Column(String(20), nullable=False)
+    code = Column(String(10), nullable=False)
+    z0cnt = Column(SmallInteger, default=0)
+    days = Column(SmallInteger, default=0)
+    edate = Column(String(20), nullable=True)
+
+    __table_args__ = (
+        PrimaryKeyConstraint('code', 'date', name='pk_stock_zt_lead_pickup'),
+    )

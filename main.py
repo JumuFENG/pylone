@@ -74,6 +74,11 @@ async def stock_fflow_redirect(code: str = Query(...), date: str = Query(None)):
     from app.stock.router import stock_fflow
     return await stock_fflow(code, date)
 
+@app.get("/stock_changes")
+async def stock_changes_redirect(codes: str = Query(...), start: str = Query(None)):
+    from app.stock.router import stock_changes
+    return await stock_changes(codes, start)
+
 
 if __name__ == '__main__':
     import uvicorn

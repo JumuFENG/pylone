@@ -160,14 +160,16 @@ class DailyUpdater():
         #     'StockDztSelector', 'StockZt1Selector',
         'StockZt1WbSelector',
         # 'StockCentsSelector',
-        #     'StockMaConvergenceSelector', 'StockZdfRanks', 'StockZtLeadingSelector', 'StockZtLeadingStepsSelector',
+        #     'StockMaConvergenceSelector', 'StockZdfRanks',
+        'StockZtLeadingSelector',
+        # 'StockZtLeadingStepsSelector',
         #     'StockZtLeadingSelectorST', 'StockDztStSelector', 'StockDztBoardSelector', 'StockDztStBoardSelector',
         'StockZdtEmotion', 'StockHotStocksRetryZt0Selector',
         #     'StockZt1BreakupSelector', 'StockZt1j2Selector', 'StockLShapeSelector', 'StockDfsorgSelector',
         'StockTrippleBullSelector',
         #     'StockEndVolumeSelector'
         ]
-        # selectors = ['StockHotStocksRetryZt0Selector']
+        # selectors = ['StockZtLeadingSelector']
         for s in selectors:
             sel = sfac.get(s)
             logger.info(f'update {s}')

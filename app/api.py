@@ -82,6 +82,8 @@ def get_http_request(
     if ':' not in url:
         while len(url) % 4 != 0:
             url += '='
+        if ' ' in url:
+            url = url.replace(' ', '+')
         url = base64.b64decode(url).decode()
 
     headers = Network.headers.copy()
@@ -92,7 +94,12 @@ def get_http_request(
         headers['Referer'] = referer
 
     response = requests.get(url, headers=headers)
-    return response.content.decode('utf-8')
+    if response.headers.get('content-type') == 'application/json':
+        return response.json()
+    try:
+        return response.json()
+    except:
+        return response.content.decode('utf-8')
 
 @router.get("/get")
 async def http_request_get(

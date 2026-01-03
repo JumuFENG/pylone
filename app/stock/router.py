@@ -26,6 +26,7 @@ router = APIRouter(
 async def stock_get(
     act: str = Query(..., embed=True),
     date: Optional[str] = Query(None, embed=True),
+    start: Optional[str] = Query(None, embed=True),
     acc: Optional[str] = Query(None, embed=True),
     accid: Optional[int] = Query(None, embed=True),
     key: Optional[str] = Query(None, embed=True),
@@ -68,6 +69,11 @@ async def stock_get(
         szd = sfac.get('StockZtDaily')
         stks = await szd.get_hot_stocks(TradingDate.prev_trading_date(TradingDate.max_traded_date(), days))
         return stks
+    if act == 'hdstocks':
+        bks = bks.split(',')
+        bkstocks = await AllBlocks.bk_stocks(bks)
+        szls = sfac.get('StockZtLeadingSelector')
+        return await szls.getHeadedStocks(bkstocks, start)
     if act == 'hotbks':
         date = TradingDate.max_traded_date()
         topbks5 = []
@@ -293,6 +299,19 @@ async def stock_fflow(code: str = Query(..., min_length=6), date: str = Query(No
     try:
         code = srt.get_fullcode(code)
         return fhis.get_main_fflow(code, date)
+    except Exception as e:
+        logger.error(e)
+        logger.debug(format_exc())
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/changes")
+async def stock_changes(codes: str = Query(..., min_length=6), start: str = Query(None, min_length=8, max_length=10)):
+    try:
+        code = qot._normalize_codes(codes)
+        changes = []
+        for c in code:
+            changes.extend(await AllStocks.get_stock_changes(srt.get_fullcode(c), start))
+        return [list(r) for r in changes]
     except Exception as e:
         logger.error(e)
         logger.debug(format_exc())

@@ -4,8 +4,8 @@ from app.stock import async_lru, zdf_from_code, zt_priceby
 from app.stock.history import srt, StockZtInfo, StockZtInfo10jqka
 from app.stock.models import MdlAllStock, MdlDayZtStocks, MdlStockBkMap, MdlStockBk, MdlDayDtStocks
 from app.stock.date import TradingDate
-from app.db import query_values, query_one_value, query_aggregate, query_group_counts, upsert_many, or_
-from .models import MdlHotstksOpen, MdlDayZdtEmotion
+from app.db import query_values, query_one_value, query_aggregate, query_group_counts, array_to_dict_list, upsert_many, or_
+from .models import MdlHotstksOpen, MdlDayZdtEmotion, MdlZtLead
 from .stock_base_selector import StockBaseSelector
 
 
@@ -348,3 +348,121 @@ class StockHotStocksOpenSelector(StockBaseSelector):
             cond.append(self.db.date >= date)
         rows = await query_values(self.db, ['date', 'code', 'zdate', 'days', 'step', 'emrk'], *cond)
         return rows
+
+class StockZtLeadingSelector(StockBaseSelector):
+    @property
+    def db(self):
+        return MdlZtLead
+
+    async def start_multi_task(self, date = None):
+        if date is None:
+            ndate = await query_aggregate('max', self.db, 'edate')
+        else:
+            ndate = date
+
+        if ndate is None:
+            ndate = '0'
+
+        szd = StockZtDaily()
+        fdate = ndate if date is None else date
+        mxdate = await query_aggregate('max', MdlDayZtStocks, 'time', MdlDayZtStocks.mkt == 0)
+        self.wkselected = []
+        laststocks = {}
+        existingselects = []
+        if ndate != '0':
+            lleads = await query_values(self.db, None, self.db.edate == ndate)
+            for d, c, l, days, e in lleads:
+                laststocks[c] = {'date': d, 'lbc': l, 'days': days, 'edate': e}
+                existingselects.append([d, c])
+        while fdate is not None and fdate <= mxdate:
+            if fdate == mxdate:
+                fdate = None
+            else:
+                fdate = await query_aggregate('min', MdlDayZtStocks, 'time', MdlDayZtStocks.time > fdate)
+            if fdate:
+                lbc = await query_aggregate('max', MdlDayZtStocks, 'lbc', MdlDayZtStocks.time == fdate)
+                if lbc > 2:
+                    sleads = await query_values(MdlDayZtStocks, ['code', 'time', 'lbc', 'days'], MdlDayZtStocks.lbc == lbc, MdlDayZtStocks.time == fdate)
+                    curstocks = []
+                    for c, d, l, n in sleads:
+                        curstocks.append(c)
+                        if c in laststocks:
+                            if laststocks[c]['edate'] != d:
+                                laststocks[c]['days'] += 1
+                                laststocks[c]['edate'] = d
+                        else:
+                            laststocks[c] = {'date': d, 'lbc': l, 'days': 1, 'edate': d}
+                    for k, v in laststocks.items():
+                        if k not in curstocks:
+                            self.wkselected.append([v['date'], k, v['lbc'], v['days'], v['edate']])
+                    laststocks = {k:v for k, v in laststocks.items() if k in curstocks}
+                elif len(laststocks.keys()) > 0:
+                    for k, v in laststocks.items():
+                        self.wkselected.append([v['date'], k, v['lbc'], v['days'], v['edate']])
+                    laststocks = {}
+        if len(laststocks.keys()) > 0:
+            for k, v in laststocks.items():
+                self.wkselected.append([v['date'], k, v['lbc'], v['days'], v['edate']])
+
+        updates = []
+        values = []
+        if len(existingselects) > 0:
+            for i in range(0, len(self.wkselected)):
+                if [self.wkselected[i][0], self.wkselected[i][1]] in existingselects:
+                    updates.append(self.wkselected[i])
+                else:
+                    values.append(self.wkselected[i])
+        else:
+            values = self.wkselected
+        if len(updates) > 0:
+            await upsert_many(self.db, array_to_dict_list(self.db, updates), ['date', 'code'])
+        if len(values) > 0:
+            await super().post_process()
+
+    async def dumpDataByDate(self, date=None):
+        if date is None:
+            date = await query_aggregate('max', self.db, 'edate')
+        rows = await query_values(self.db, ['code', 'z0cnt', 'days'], self.db.edate == date)
+        return [list(row) for row in rows]
+
+    async def getHeadedStocks(self, stocks, date):
+        minZdays = 0 if date == TradingDate.max_trading_date() else 1
+        date = TradingDate.prev_trading_date(date)
+        zddic = {}
+        mxzday = 0
+        for code in stocks:
+            allkl = await self.get_kd_data(code, date, fqt=1)
+            zdays = 0
+            i = 1
+            zdf = 10
+            if code.startswith('sz30') or code.startswith('sh68'):
+                zdf = 20
+            elif code.startswith('bj'):
+                zdf = 30
+            while i < len(allkl):
+                if allkl[i].high == allkl[i].close and allkl[i].close >= zt_priceby(allkl[i-1].close, zdf=zdf):
+                    zdays += 1
+                i += 1
+            zddic[code] = zdays
+            if zdays > mxzday:
+                mxzday = zdays
+
+        ztcntarr = [0] * (mxzday + 1)
+        for n in zddic.values():
+            ztcntarr[n] += 1
+
+        hdcnt = 0
+        ztcntsel = []
+        for i in range(mxzday, 0, -1):
+            hdcnt += ztcntarr[i]
+            if ztcntarr[i] > 0 and i > minZdays:
+                ztcntsel.append(i)
+            if hdcnt >= 10:
+                break
+
+        rstks = []
+        for code in zddic:
+            if zddic[code] in ztcntsel:
+                rstks.append([code, zddic[code]])
+        rstks = sorted(rstks, key=lambda x: x[1], reverse=True)
+        return [c for c, n in rstks]

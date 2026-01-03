@@ -12,7 +12,7 @@ from app.hu import classproperty, to_cls_secucode, time_stamp
 from app.hu.network import Network as net
 from app.lofig import logger
 from app.db import upsert_one, upsert_many, query_one_value, query_one_record, query_aggregate, query_values, delete_records
-from .models import MdlAllStock, MdlStockBk, MdlStockBkMap, MdlSMStats
+from .models import MdlAllStock, MdlStockBk, MdlStockBkMap, MdlSMStats, MdlStockChanges
 from .schemas import PmStock
 from .history import (
     Network, array_to_dict_list,
@@ -346,6 +346,16 @@ class AllStocks:
     @classmethod
     async def get_purelost4up(cls):
         return await StockList.get_stocks('purelost4up')
+
+    @classmethod
+    async def get_stock_changes(cls, code, start=None):
+        if start is None:
+            start = await query_aggregate('max', MdlStockChanges, 'time')
+            start = start.split()[0]
+        cond = [MdlStockChanges.time >= start]
+        if code is not None:
+            cond.append(MdlStockChanges.code == code)
+        return await query_values(MdlStockChanges, None, *cond)
 
 
 class AllBlocks:
