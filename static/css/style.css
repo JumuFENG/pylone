@@ -11,14 +11,15 @@ body {
     display: flex;
     justify-content: center;
     align-items: center;
-    padding: 20px;
+    margin: 0;
+    padding: 10px;
 }
 
 .container {
     background: white;
     border-radius: 10px;
     box-shadow: 0 10px 40px rgba(0, 0, 0, 0.1);
-    padding: 40px;
+    padding: 2px;
     width: 100%;
 }
 
@@ -177,8 +178,8 @@ select:focus {
     font-weight: 500;
 }
 
-.nav-links a:hover {
-    text-decoration: underline;
+.nav-links a.active {
+    text-decoration: underline .2em;
 }
 
 table {
@@ -242,7 +243,8 @@ tr:hover {
 }
 
 #userInfo:hover .hover-actions,
-.stock-item:hover .hover-actions {
+.stock-item:hover .hover-actions,
+.nav:hover .hover-actions {
     opacity: 1;
     visibility: visible;
 }

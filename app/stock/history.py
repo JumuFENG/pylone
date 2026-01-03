@@ -103,7 +103,7 @@ class Khistory:
         if start is not None:
             kldata = kldata[kldata['time'] >= start]
 
-        if fqt == 0:
+        if fqt == 0 or len(kldata) == 0:
             return kldata
 
         return await cls.fix_price(code, kldata, fqt)

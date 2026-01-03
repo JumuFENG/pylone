@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>盯盘 - phoniun交易系统</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    <link rel="stylesheet" href="/static/css/daily_trade.css">
+</head>
+<body>
+    <div class="container">
+        <div id="alert" style="display: none; position: fixed; top: 100px; left: 50%; transform: translateX(-50%);"></div>
+        <div id="loading" class="loading">加载中...</div>
+        <div class="nav">
+            <div id="banner"></div>
+            <div class="nav-links hover-actions">
+            </div>
+        </div>
+        <div id="header-area" style="display: flex;"></div>
+        <div id="steps-panel" style="margin: 3px 10px;"></div>
+        <div id="auctions-panel"></div>
+        <div id="body-area" style="display: flex;">
+            <div id="bk_div">
+                <div id="plate-list-table" class="table-container">
+                </div>
+            </div>
+            <div id="charts-panel" style="width: 750px">
+
+            </div>
+            <div id="plates-manage-panel">
+
+            </div>
+        </div>
+        <div id="footer-area" style="height: 10%;"></div>
+    </div>
+    <script src="/static/js/auth.js"></script>
+    <script src="/static/js/common.js"></script>
+    <script src="/static/vender/localforage.min.js"></script>
+    <script src="/static/vender/echarts.js"></script>
+    <script>
+        window.xreq = function(m) {return window;}
+        class GlobalManager {
+            constructor() {
+                this.fha = {};
+                this.plate_stocks = {};
+                this.stock_extra = {};
+                this.stock_bks = {};
+                this.stock_events = {};
+                this.plate_basics = {};
+                this.stock_tlines = {};
+                this.stock_precloses = {};
+                this.tline_que = new Set();
+                this.tline_focused = {};
+                this.tline_listeners = [];
+                this.event_listeners = [];
+                this.stats_listeners = [];
+                this.daily_ranks = [];
+                this.daily_ranks_all = [];
+            }
+
+            log(...args) {
+                console.log(`[${new Date().toLocaleTimeString('zh',{hour12:false})}] ${args.join(' ')}`);
+            }
+        }
+
+        var emjyBack = new GlobalManager();
+        let currentUser = null;
+        async function loadUserInfo() {
+            try {
+                currentUser = await getCurrentUser();
+                document.getElementById('loading').style.display = 'none';
+            } catch (error) {
+                showError(error.message);
+                document.getElementById('loading').style.display = 'none';
+            }
+            common.init_nav_links(currentUser);
+        }
+
+        window.addEventListener('load', _ => {
+            if (location.host) {
+                emjyBack.fha.server = location.origin + '/';
+                emjyBack.fha.svr5000 = emjyBack.fha.server;
+                // guang.server = location.protocol + '//' + location.hostname + '/';
+                guang.dserver = emjyBack.fha.svr5000;
+                guang.isweb = true;
+            }
+            loadUserInfo();
+        });
+    </script>
+    <script src="/static/js/guang.js"></script>
+    <script src="/static/js/feng.js"></script>
+    <script src="/static/js/dailytrading.js"></script>
+</body>
+</html>

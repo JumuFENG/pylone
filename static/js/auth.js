@@ -82,7 +82,7 @@ async function logout() {
     } catch (error) {
         console.error('Logout error:', error);
     } finally {
-        window.location.href = '/login.html';
+        window.location.href = '/html/login.html';
     }
 }
 
@@ -93,7 +93,7 @@ async function getCurrentUser() {
 
     if (!response.ok) {
         if (response.status === 401) {
-            window.location.href = '/login.html';
+            window.location.href = '/html/login.html';
         }
         throw new Error('获取用户信息失败');
     }
@@ -148,9 +148,9 @@ async function checkAuth() {
             credentials: 'include'
         });
         if (!response.ok) {
-            window.location.href = '/login.html';
+            window.location.href = '/html/login.html';
         }
     } catch (error) {
-        window.location.href = '/login.html';
+        window.location.href = '/html/login.html';
     }
 }

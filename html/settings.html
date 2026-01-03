@@ -310,9 +310,6 @@
         <div class="nav">
             <h2>设置</h2>
             <div class="nav-links">
-                <a href="/html/index.html">首页</a>
-                <a href="/html/profile.html">个人中心</a>
-                <a href="#" onclick="logout()">退出</a>
             </div>
         </div>
 
@@ -404,6 +401,7 @@
     </div>
 
     <script src="/static/js/auth.js"></script>
+    <script src="/static/js/common.js"></script>
     <script>
         let allStocks = [];
         let searchResults = [];
@@ -976,6 +974,7 @@
             loadSystemInfo();
             loadSystemSettings();
         });
+        common.init_nav_links();
     </script>
 </body>
 </html>

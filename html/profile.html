@@ -13,9 +13,6 @@
         <div class="nav">
             <div ></div>
             <div class="nav-links">
-                <a href="#" id="adminLink" style="display: none;">用户管理</a>
-                <a href="#" id="settingsLink" style="display: none;">系统设置</a>
-                <a href="#" onclick="logout()">退出登录</a>
             </div>
         </div>
         <div style="display: flex; gap: 15px;">
@@ -95,6 +92,7 @@
     </div>
 
     <script src="/static/js/auth.js"></script>
+    <script src="/static/js/common.js"></script>
     <script>
         let currentUser = null;
         let isEditing = false;
@@ -102,6 +100,7 @@
         async function loadUserInfo() {
             try {
                 currentUser = await getCurrentUser();
+                common.init_nav_links(currentUser);
                 loadSubAccounts();
 
                 document.getElementById('userId').textContent = currentUser.id;
@@ -117,16 +116,6 @@
                 document.getElementById('userSuperuser').innerHTML = currentUser.is_superuser
                     ? '<span class="badge badge-success">是</span>'
                     : '<span class="badge badge-danger">否</span>';
-
-                // 如果是管理员，显示用户管理链接
-                if (currentUser.is_superuser) {
-                    const adminLink = document.getElementById('adminLink');
-                    adminLink.style.display = 'inline';
-                    adminLink.href = '/admin.html';
-                    const settingsLink = document.getElementById('settingsLink');
-                    settingsLink.style.display = 'inline';
-                    settingsLink.href = '/settings.html';
-                }
 
                 if (currentUser.parent_id) {
                     document.getElementById('createUser').style.display = 'none';

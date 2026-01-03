@@ -30,7 +30,7 @@
             <button type="submit" class="btn">注册</button>
         </form>
         <div class="link">
-            已有账号？<a href="/login.html">立即登录</a>
+            已有账号？<a href="/html/login.html">立即登录</a>
         </div>
     </div>
 
@@ -72,7 +72,7 @@
                 }
                 showSuccess('注册成功！正在跳转到登录页...');
                 setTimeout(() => {
-                    window.location.href = '/login.html';
+                    window.location.href = '/html/login.html';
                 }, 1500);
             } catch (error) {
                 showError(error.message);

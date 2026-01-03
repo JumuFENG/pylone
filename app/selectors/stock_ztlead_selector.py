@@ -432,6 +432,8 @@ class StockZtLeadingSelector(StockBaseSelector):
         mxzday = 0
         for code in stocks:
             allkl = await self.get_kd_data(code, date, fqt=1)
+            if not allkl:
+                continue
             zdays = 0
             i = 1
             zdf = 10

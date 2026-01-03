@@ -11,8 +11,6 @@
         <div class="nav">
             <h2>用户管理</h2>
             <div class="nav-links">
-                <a href="/profile.html">个人信息</a>
-                <a href="#" onclick="logout()">退出登录</a>
             </div>
         </div>
 
@@ -98,6 +96,7 @@
     </div>""
 
     <script src="/static/js/auth.js"></script>
+    <script src="/static/js/common.js"></script>
     <script>
         async function checkAdminAccess() {
             try {
@@ -105,10 +104,11 @@
                 if (!user.is_superuser) {
                     showError('您没有管理员权限');
                     setTimeout(() => {
-                        window.location.href = '/profile.html';
+                        window.location.href = '/html/profile.html';
                     }, 2000);
                     return false;
                 }
+                await common.init_nav_links(user);
                 return true;
             } catch (error) {
                 showError(error.message);

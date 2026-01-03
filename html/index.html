@@ -10,8 +10,8 @@
     <div class="container center">
         <h1>欢迎使用phoniun交易后台</h1>
         <div style="text-align: center; margin-top: 30px;">
-            <a href="/login.html" class="btn" style="display: inline-block; text-decoration: none; margin: 10px;">登录</a>
-            <a href="/register.html" class="btn btn-secondary" style="display: inline-block; text-decoration: none; margin: 10px;">注册</a>
+            <a href="/html/login.html" class="btn" style="display: inline-block; text-decoration: none; margin: 10px;">登录</a>
+            <a href="/html/register.html" class="btn btn-secondary" style="display: inline-block; text-decoration: none; margin: 10px;">注册</a>
         </div>
         <div style="text-align: center; margin-top: 30px;">
             <a href="/docs" style="color: #667eea; text-decoration: none;">查看 API 文档</a>
@@ -24,7 +24,7 @@
         fetch('/users/me', { credentials: 'include' })
             .then(response => {
                 if (response.ok) {
-                    window.location.href = '/profile.html';
+                    window.location.href = '/html/profile.html';
                 }
             })
             .catch(() => {
