@@ -145,7 +145,8 @@ async def migrate_table_as_is(
     to_dbname: str,
     from_table_name: str,
     to_table_name: str = None,
-    unique_keys: List[str] = []
+    unique_keys: List[str] = [],
+    skip_id = True
 ):
     conn = await get_connection()
     async with conn.cursor() as cursor:
@@ -158,6 +159,8 @@ async def migrate_table_as_is(
         await cursor.execute(f"SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = '{from_dbname}' AND TABLE_NAME = '{from_table_name}'")
         result = await cursor.fetchall()
         columns = [row[0] for row in result]
+        if skip_id and 'id' in columns:
+            columns.remove('id')
 
         source_columns = ', '.join(columns)
         await cursor.execute(f"SELECT {source_columns} FROM `{from_dbname}`.`{from_table_name}`")
@@ -166,6 +169,14 @@ async def migrate_table_as_is(
         if not rows:
             print(f"源表 '{from_table_name}' 中没有数据可迁移。")
             return
+
+        code_idx = columns.index('code') if 'code' in columns else None
+        def transform_func(row):
+            if code_idx is not None:
+                return row[:code_idx] + (row[code_idx].lower(),) + row[code_idx + 1:]
+            else:
+                return row
+        rows = [transform_func(row) for row in rows]
 
         # 构建插入语句
         target_columns = source_columns
@@ -176,8 +187,10 @@ async def migrate_table_as_is(
         if unique_keys:
             update_columns = [f"{column} = VALUES({column})" for column in columns if column not in unique_keys]
             update_clause = ', '.join(update_columns)
-
-            insert_sql = f"INSERT INTO `{to_dbname}`.`{to_table_name}` ({target_columns}) VALUES ({placeholders}) ON DUPLICATE KEY UPDATE {update_clause}"
+            if update_clause:
+                insert_sql = f"INSERT INTO `{to_dbname}`.`{to_table_name}` ({target_columns}) VALUES ({placeholders}) ON DUPLICATE KEY UPDATE {update_clause}"
+            else:
+                insert_sql = f"INSERT INTO `{to_dbname}`.`{to_table_name}` ({target_columns}) VALUES ({placeholders}) ON DUPLICATE KEY UPDATE {columns[0]} = VALUES({columns[0]})"
         else:
             insert_sql = f"INSERT INTO `{to_dbname}`.`{to_table_name}` ({target_columns}) VALUES ({placeholders})"
 
@@ -619,7 +632,7 @@ async def setup_holidays():
 
 async def migrate_user_data():
     tables = [
-        'user_stocks', 'user_strategy', 'user_orders', 'user_full_orders', 'user_costdog', 'ucostdog_urque', 'user_earned', 'user_earning',
+        'user_stocks', 'user_strategy', 'user_orders', 'user_full_orders', 'user_earned', 'user_earning',
         'user_deals_unknown', 'user_deals_archived', 'user_stock_buy', 'user_stock_sell',
     ]
     table_abc = {
@@ -694,6 +707,15 @@ async def migrate_user_data():
             await migrate_table(conn, from_dbname, to_dbname, from_tbl, tbl, col_mapping, unique_keys=ukeys, transform_func=transform_func)
 
 
+async def migrate_selectors():
+    good_tables = ['stock_zt_lead_pickup', 'stock_tripple_bull_pickup', 'stock_day_zdtemotion']
+    # 'stock_dt3_pickup', 'stock_zt1wb_pickup', 'stock_day_hotstks_retry_zt0'
+    sel_tables = ['stock_day_hotstks_open']
+    for tbl in sel_tables:
+        await migrate_table_as_is('stock_center', 'pylone', tbl, unique_keys=['date', 'code'])
+
+
+
 if __name__ == '__main__':
     loop = asyncio.get_event_loop()
     # loop.run_until_complete(migrate_table_as_is('testdb', 'pylone', 'stock_bks', unique_keys=['code']))
@@ -710,4 +732,5 @@ if __name__ == '__main__':
     # loop.run_until_complete(migrate_day_zt_concepts())
     # loop.run_until_complete(migrate_day_dt_stocks())
     # loop.run_until_complete(migrate_stock_dt_map())
-    loop.run_until_complete(migrate_user_data())
+    # loop.run_until_complete(migrate_user_data())
+    loop.run_until_complete(migrate_selectors())

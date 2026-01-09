@@ -1,15 +1,27 @@
+import os
 import json
 import datetime
 from bs4 import BeautifulSoup
-from app.hu import lru_cache
+from app.hu import lru_cache, classproperty
 from app.hu.network import Network
+from app.lofig import Config
 from app.db import query_values, insert_many, array_to_dict_list
 from .h5 import KLineStorage as kls
 from .models import MdlHolidays
 
 
 class TradingDate():
-    holidays = []
+    @classproperty
+    def holidayfile(cls):
+        return os.path.join(Config.h5_history_dir(), 'holidays.json')
+
+    @classproperty
+    def holidays(cls):
+        if os.path.isfile(cls.holidayfile):
+            with open(cls.holidayfile, 'r') as f:
+                return json.load(f)
+        return []
+
     @staticmethod
     def today(sep='-'):
         return datetime.datetime.now().strftime(f'%Y{sep}%m{sep}%d')
@@ -175,14 +187,7 @@ class TradingDate():
         cls.min_traded_date.cache_clear()
 
     @classmethod
-    async def load_holidays(cls):
-        holidays = await query_values(MdlHolidays, ['date'])
-        cls.holidays = [d for d, in holidays]
-
-    @classmethod
     async def update_holiday(cls):
-        if not cls.holidays:
-            await cls.load_holidays()
         url = 'https://www.tdx.com.cn/url/holiday/'
         response = Network.session.get(url)
         response.raise_for_status()
@@ -201,3 +206,5 @@ class TradingDate():
                     cls.holidays.append(d)
         if len(cn_holidays) > 0:
             await insert_many(MdlHolidays, array_to_dict_list(MdlHolidays, cn_holidays))
+            with open(cls.holidayfile, 'w') as f:
+                return json.dump(cls.holidays, f)

@@ -2,7 +2,7 @@ from typing import Optional
 from app.lofig import logger
 from app.stock.models import MdlAllStock
 from app.stock.date import TradingDate
-from app.db import query_one_record, query_values, query_aggregate, upsert_one
+from app.db import query_one_record, query_values, query_aggregate, upsert_one, delete_records
 from .models import MdlZt0hrst0
 from .stock_base_selector import StockBaseSelector
 from .stock_ztlead_selector import StockHotStocksOpenSelector
@@ -60,6 +60,7 @@ class StockHotStocksRetryZt0Selector(StockBaseSelector):
                 lbc, fdate, ldate = self.check_lbc(allkl)
                 if lbc >= step and ldate != d and fdate < d:
                     days = len([d for x in allkl if x.time >= fdate and x.time <= ldate])
+                    await delete_records(self.db, self.db.code == c and self.db.date == d)
                     await upsert_one(self.db, {'code': c, 'date': ldate, 'days': days, 'step': lbc, 'remdays': 66}, ['code', 'date'])
                     self.wkstocks.append((c,ldate,days,lbc,66))
                     continue
@@ -79,7 +80,7 @@ class StockHotStocksRetryZt0Selector(StockBaseSelector):
         lbc, fid, lid = 0, 0, 0
         mxlbc, mxfid, mxlid = 0, 0, 0
         for i in range(0, len(allkl)):
-            if round(allkl[i].change) >= 0.1 and allkl[i].high == allkl[i].close:
+            if round(allkl[i].change, 2) >= 0.1 and allkl[i].high == allkl[i].close:
                 if lbc == 0:
                     fid = i
                 lbc += 1
@@ -106,18 +107,18 @@ class StockHotStocksRetryZt0Selector(StockBaseSelector):
         i = 0
         while i < len(allkl) and allkl[i].time < d:
             i += 1
-        if not any([round(x.change) >= 0.1 and x.high == x.close for x in allkl if x.time > d and allkl.index(x) - i < 66]):
+        if not any([round(x.change, 2) >= 0.1 and x.high == x.close for x in allkl if x.time > d and allkl.index(x) - i < 66]):
             self.wkselected.append([d,c,days,step,0,allkl[i+66].time])
             return
         last_zid = i + 66
         while last_zid > i:
-            if round(allkl[last_zid].change) >= 0.1 and allkl[last_zid].high == allkl[last_zid].close:
+            if round(allkl[last_zid].change, 2) >= 0.1 and allkl[last_zid].high == allkl[last_zid].close:
                 break
             last_zid -= 1
         fianal_zid = max(last_zid + 22, i + 66)
         while fianal_zid < len(allkl):
             while fianal_zid > last_zid:
-                if round(allkl[fianal_zid].change) >= 0.1 and allkl[fianal_zid].high == allkl[fianal_zid].close:
+                if round(allkl[fianal_zid].change, 2) >= 0.1 and allkl[fianal_zid].high == allkl[fianal_zid].close:
                     break
                 fianal_zid -= 1
             if fianal_zid > last_zid:

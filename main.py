@@ -3,7 +3,7 @@ from fastapi import FastAPI, Request, Depends, Query
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from fastapi.responses import RedirectResponse
-from app.lofig import Config, logger, redirect_std_logs
+from app.lofig import Config, logging, logger, redirect_std_logs
 from app.users.router import router as users_router
 from app.admin.router import router as admin_router
 from app.stock.router import router as stock_router
@@ -16,9 +16,11 @@ from app.admin.system_settings import SystemSettings
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # 启动时执行
+    tdxlog = logging.getLogger('PYTDX')
+    tdxlog.setLevel(Config.log_level())
+    logger.info('set pytdx log level.')
     await SystemSettings.initialize_defaults()
     await SystemSettings.get_all()
-    await TradingDate.load_holidays()
     Timers.setup()
     yield
     # 关闭时执行（如果需要清理资源）

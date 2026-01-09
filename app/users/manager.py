@@ -148,6 +148,8 @@ current_superuser = fastapi_users.current_user(superuser=True)
 async def verify_user(parent, acc=None, accid=None):
     if not parent:
         raise exceptions.InvalidVerifyToken()
+    if parent.id == accid or parent.username == acc:
+        return parent
     async for user_manager in get_user_manager():
         subuser = await user_manager.get_sub_account(parent, acc, accid)
     return subuser
@@ -801,14 +803,17 @@ class UserStockManager():
         buy_records = await query_values(UserStockBuy, None, *conds)
         buy_records = array_to_dict_list(UserStockBuy, buy_records)
 
+        conds = (UserStockSell.user_id == user.id,)
+        if code is not None:
+            conds += (UserStockSell.code == code,)
         sell_records = await query_values(UserStockSell, None, *conds)
         sell_records = array_to_dict_list(UserStockSell, sell_records)
 
         buy_deals = transform_records(buy_records, 'B')
         sell_deals = transform_records(sell_records, 'S')
 
-        all_deals = buy_deals + sell_deals
-        return sorted(all_deals, key=lambda x: x['time'])
+        return buy_deals + sell_deals
+        # return sorted(all_deals, key=lambda x: x['time'])
 
     @classmethod
     async def get_archived_deals(cls, user: User, realcash=0):
@@ -894,7 +899,7 @@ class UserStockManager():
                 strdata['uramount'] = json.loads(ustk.uramount)
 
         strlst = await query_values(UserStrategy, None, UserStrategy.user_id == user.id, UserStrategy.code == code)
-        strlst = array_to_dict_list(UserStrategy, strlst)
+        strlst = [s._mapping for s in strlst ]
         for sl in strlst:
             strdata['strategies'][sl['id']] = json.loads(sl['data'])
             strdata['transfers'][sl['id']] =  {"transfer": sl['trans']}

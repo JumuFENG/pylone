@@ -125,9 +125,12 @@ async def stock_get(
             # return rked5d
             return []
         raise HTTPException(404, detail=f"Unknown istrategy key: {key}")
-    if act in ("watchings", ):
+    if act in ("watchings", "deals"):
         user = await verify_user(basic_user or bearer_user, acc, accid)
-        return await usm.watchings_with_strategy(user)
+        if act == "watchings":
+            return await usm.watchings_with_strategy(user)
+        if act == "deals":
+            return await usm.get_deals(user)
     return {"message": f"Hello {act}"}
 
 @router.post("", openapi_extra=pparam_doc([
@@ -150,6 +153,8 @@ async def stock_post(
     date: Optional[str] = PostParams.create("date", default=None),
     auctions: Optional[str] = PostParams.create("auctions", default=None),
     matched: Optional[str] = PostParams.create("matched", default=None),
+    buysid: Optional[str] = PostParams.create("buysid", default=''),
+    sellsid: Optional[str] = PostParams.create("sellsid", default=''),
     basic_user: Optional[User] = Depends(get_current_user_basic),
     bearer_user: Optional[User] = Depends(fastapi_users.current_user(optional=True)),
 ):
@@ -162,11 +167,14 @@ async def stock_post(
         elif act == 'fixdeals':
             await usm.fix_deals(user, data)
         elif act == 'forget':
-            await usm.forget_stock(user, data)
+            await usm.forget_stock(user, code)
         elif act == 'costdog':
             usm.save_costdog(user, data)
         elif act == 'rmwatch':
-            usm.remove_user_stock_with_deals(user, data)
+            await usm.forget_stock(user, code)
+            bsid = buysid.split(',')
+            ssid = sellsid.split(',')
+            await usm.remove_deals(user, code, bsid, ssid)
         elif act == 'strategy':
             if len(code) != 8:
                 code = srt.get_fullcode(code)
@@ -307,10 +315,13 @@ async def stock_fflow(code: str = Query(..., min_length=6), date: str = Query(No
 @router.get("/changes")
 async def stock_changes(codes: str = Query(..., min_length=6), start: str = Query(None, min_length=8, max_length=10)):
     try:
-        code = qot._normalize_codes(codes)
         changes = []
-        for c in code:
-            changes.extend(await AllStocks.get_stock_changes(srt.get_fullcode(c), start))
+        if not codes:
+            changes = await AllStocks.get_stock_changes(None, start)
+        else:
+            code = qot._normalize_codes(codes)
+            for c in code:
+                changes.extend(await AllStocks.get_stock_changes(srt.get_fullcode(c), start))
         return [list(r) for r in changes]
     except Exception as e:
         logger.error(e)

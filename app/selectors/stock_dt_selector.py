@@ -16,7 +16,7 @@ class StockDtMap(StockBaseSelector):
     @property
     def db(self):
         return MdlDayDtMap
-    
+
     @property
     def dtinfo(self):
         return StockDtInfo()
@@ -33,12 +33,18 @@ class StockDtMap(StockBaseSelector):
 
     async def start_multi_task(self, mpdate):
         mxdate = TradingDate.max_trading_date()
-        premap = await self.dumpDataByDate(mpdate)
         if mpdate is None:
             mpdate = await query_aggregate('min', self.dtinfo.db, 'time')
+        premap = await self.dumpDataByDate(mpdate)
         if premap and premap['date'] != mpdate:
             logger.info('data invalid %s', premap)
             return
+
+        def cache_dtl(cache_code, cache_step, cache_date):
+            if cache_code not in self.dtdtl:
+                self.dtdtl[cache_code] = []
+            self.dtdtl[cache_code].append({'ct': cache_step, 'date': cache_date})
+
 
         if premap is None:
             premap = []
@@ -60,10 +66,13 @@ class StockDtMap(StockBaseSelector):
                     if code == c:
                         oldmp = True
                         nmap.append([nxdate, (step + 1 if suc==1 else step), c, 1])
+                        cache_dtl(c, step + 1 if suc==1 else step, nxdate)
                     else:
                         premapbk.append([code, step, suc])
                 if not oldmp:
                     nmap.append([nxdate, 1, c, 1])
+                    cache_dtl(c, 1, nxdate)
+
                 premap = premapbk
 
             for code, step, suc in premap:
@@ -75,6 +84,8 @@ class StockDtMap(StockBaseSelector):
                 if not kd:
                     continue
                 lkl = [k for k in kd if k.time == nxdate]
+                if len(lkl) < 1:
+                    continue
                 if len(lkl) != 1:
                     if lkl[-1].time < nxdate:
                         ts = await query_one_value(MdlAllStock, MdlAllStock.quit_date, MdlAllStock.code == code, MdlAllStock.typekind == 'TSStock')
@@ -88,7 +99,8 @@ class StockDtMap(StockBaseSelector):
                         dkl = kd[0]
                         if lkl.low - dkl.close * 0.9 <= 0:
                             nmap.append([nxdate, (step + 1 if suc==1 else step), code, 1])
-                        elif lkl.close - dkl.close * 1.08 <= 0 and len(kd) <= 4:
+                            cache_dtl(code, step + 1 if suc==1 else step, nxdate)
+                        elif lkl.close - dkl.close * 1.08 <= 0 and len([k_ for k_ in kd if k_.time <= nxdate]) <= 4:
                             nmap.append([nxdate, (step + 1 if suc==1 else step), code, 0])
 
             self.wkselected = []
@@ -111,15 +123,11 @@ class StockDtMap(StockBaseSelector):
         if date is None:
             return None
 
-        while date <= TradingDate.max_trading_date():
-            mp = await query_values(self.db, ['code', 'step', 'success'], self.db.time == date)
-            if mp is not None and len(mp) > 0:
-                data = {'date': date}
-                dtmap = []
-                for code, step, suc in mp:
-                    dtmap.append([code, step, suc])
-                data['data'] = dtmap
-                return data
-            date = TradingDate.next_trading_date(date)
-
-        return await self.dumpDataByDate()
+        mp = await query_values(self.db, ['code', 'step', 'success'], self.db.time == date)
+        if mp is not None and len(mp) > 0:
+            data = {'date': date}
+            dtmap = []
+            for code, step, suc in mp:
+                dtmap.append([code, step, suc])
+            data['data'] = dtmap
+            return data
