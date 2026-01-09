@@ -39,12 +39,6 @@ td.name:hover {
     color: #0056b3; /* 悬停时的颜色 */
 }
 
-.red {
-    color: red;
-}
-.green {
-    color: green;
-}
 .center {
     text-align: center;
 }
@@ -149,6 +143,7 @@ td.name:hover {
 .action-area {
     display: flex;
     text-align: left;
+    min-height: 25px;
 }
 
 .panel {

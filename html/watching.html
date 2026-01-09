@@ -6,9 +6,19 @@
     <title>盯盘 - phoniun交易系统</title>
     <link rel="stylesheet" href="/static/css/style.css">
     <link rel="stylesheet" href="/static/css/daily_trade.css">
+    <style>
+        #watching-container div{
+            margin: 1px 0;
+        }
+        #plates-manage-panel .container {
+            padding: unset;
+            box-shadow: none;
+            width: auto;
+        }
+    </style>
 </head>
 <body>
-    <div class="container">
+    <div id="watching-container" class="container">
         <div id="alert" style="display: none; position: fixed; top: 100px; left: 50%; transform: translateX(-50%);"></div>
         <div id="loading" class="loading">加载中...</div>
         <div class="nav">

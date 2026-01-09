@@ -236,7 +236,8 @@ GlobalManager.prototype.getStockHistChanges = function(stocks, days=3) {
     if (typeof(stocks) == 'string') {
         stocks = [stocks];
     }
-    const url = `${emjyBack.fha.svr5000}stock_changes?codes=${stocks?.join(',')??''}&days=${days}`;
+    stocks = stocks.map(s => guang.convertToQtCode(s));
+    const url = `${emjyBack.fha.svr5000}stock/changes?codes=${stocks?.join(',')??''}&days=${days}`;
     fetch(url).then(r=>r.json()).then(changes => {
         this.parseChanges(changes);
     });
@@ -245,7 +246,8 @@ GlobalManager.prototype.getStockHistChanges = function(stocks, days=3) {
 GlobalManager.prototype.getStockChanges = function(stocks) {
     let promise;
     if (emjyBack.tradeDayEnded()) {
-        const url = `${emjyBack.fha.svr5000}stock_changes?codes=${stocks?.join(',')??''}&start=${emjyBack.last_traded_date}`;
+        stocks = stocks.map(s => guang.convertToQtCode(s));
+        const url = `${emjyBack.fha.svr5000}stock/changes?codes=${stocks?.join(',')??''}&start=${emjyBack.last_traded_date}`;
         promise = fetch(url).then(r=>r.json());
     } else {
         promise = feng.getStockChanges(stocks);
@@ -1131,7 +1133,9 @@ class DailyZtStepsPanel {
         parent.appendChild(stepsdesc);
         parent.appendChild(this.container);
         this.zstep_stockset = document.createElement('div');
-        this.zstep_stockset.style.textAlign = 'center';
+        this.zstep_stockset.style.display = 'flex';
+        this.zstep_stockset.style.gap = '10px';
+        this.zstep_stockset.style.justifyContent = 'center';
         parent.appendChild(this.zstep_stockset);
         this.ztstocks_bkrank = new StocksBkRanks(false);
         parent.appendChild(this.ztstocks_bkrank.render());
@@ -1370,7 +1374,7 @@ class DailyZtStepsPanel {
         this.zstep_stockset.innerHTML = '';
         for (const k in vns) {
             this.zstep_stockset.innerHTML +=
-            `<input type="radio" value="${k}" name="zstepradio" id="zstep_${k}" ${k==optval?'checked="true"':''}>${vns[k]}`;
+            `<label><input type="radio" value="${k}" name="zstepradio" id="zstep_${k}" ${k==optval?'checked="true"':''}>${vns[k]}</label>`;
         }
         this.zstep_stockset.querySelectorAll('input[name="zstepradio"]').forEach(ele=> {
             ele.onchange = e => {
@@ -2342,7 +2346,7 @@ class MainFundFlow {
         }
 
         var opt = this.flowChart.getOption();
-        if (opt.series[0].data.length > flow.length) {
+        if (!opt?.series[0]?.data || opt.series[0].data.length > flow.length) {
             this.clearChart();
             this.updateFundFlow(flow);
             return;
@@ -2614,9 +2618,10 @@ class SecuCard {
 
     async updateCardContent(plate) {
         this.plate = plate;
-        const pinfo = await feng.getStockBasics(this.plate);
+        const pinfo = feng.stock_basics[guang.convertToQtCode(plate)];
         if (!pinfo) {
-            this.element.onmouseenter = () => {
+            this.element.onmouseenter = async () => {
+                await feng.getStockBasics(this.plate);
                 this.updateCardContent(this.plate);
             }
             return this.element;
@@ -4139,18 +4144,21 @@ class EmPopularity extends LeftColumnBarItem {
             上次更新：<span id="refresh_label"></span>
             <button id="refresh" title="刷新">🔄</button>
             <a href="https://xuangu.eastmoney.com/" target="_blank">选股器</a>
-            <br />
-            <input id="r_show_main" name="rmarket" type="radio" style="margin: 0;" checked="true"> 全部
-            <input id="r_show_cy" name="rmarket" type="radio" style="margin: 0;"> 创业
-            <input id="r_show_kc" name="rmarket" type="radio" style="margin: 0;"> 科创
-            <input id="r_show_bj" name="rmarket" type="radio" style="margin: 0;"> 北交
-            <input id="r_show_st" name="rmarket" type="radio" style="margin: 0;"> ST
-            <input id="r_show_zlead" name="rmarket" type="radio" style="margin: 0;"> 高标
+
+            <div style="display: flex; gap: 5px;">
+                <label><input id="r_show_main" name="rmarket" type="radio" style="margin: 0;" checked="true"> 全部</label>
+                <label><input id="r_show_cy" name="rmarket" type="radio" style="margin: 0;"> 创业</label>
+                <label><input id="r_show_kc" name="rmarket" type="radio" style="margin: 0;"> 科创</label>
+                <label><input id="r_show_bj" name="rmarket" type="radio" style="margin: 0;"> 北交</label>
+                <label><input id="r_show_st" name="rmarket" type="radio" style="margin: 0;"> ST</label>
+                <label><input id="r_show_zlead" name="rmarket" type="radio" style="margin: 0;"> 高标</label>
+            </div>
         </div>
         <div style="overflow: auto; height: 92%; overscroll-behavior: contain;">
             <div id="popularity_list"></div>
         </div>
         `
+
         this.rootPanel.querySelector('#r_show_main').onclick = () => {
             this.mktfilter = 'main';
             this.showRootPanel();

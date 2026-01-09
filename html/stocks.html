@@ -5,9 +5,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>持仓管理 - phoniun交易后台</title>
     <link rel="stylesheet" href="/static/css/style.css">
+    <link rel="stylesheet" href="/static/css/stock.css">
 </head>
 <body>
-    <div class="container">
+    <div class="container center-wide">
         <div id="alert" style="display: none; position: fixed; top: 100px; left: 50%; transform: translateX(-50%);"></div>
         <div id="loading" class="loading">加载中...</div>
         <div class="nav">
@@ -15,20 +16,73 @@
             <div class="nav-links">
             </div>
         </div>
+        <div class="content">
+            <div class="container center-wide">
+                <div id="acc_anchors"></div>
+                <div style="padding: 5px;">
+                    <select name="" id="selection_filter"></select>
+                    <select name="" id="strategy_filter"></select>
+                </div>
+                <div id="acc_stock_list"></div>
+                <div style="padding: 5px;">
+                    <input id="ipt_watch_code">
+                    <button id="btn_add_watch_code" class="btn-outline btn-clr1">新增观察股票</button>
+                </div>
+            </div>
+        </div>
     </div>
     <script src="/static/js/auth.js"></script>
     <script src="/static/js/common.js"></script>
+    <script src="/static/js/guang.js"></script>
+    <script>
+        window.xreq = function(m) {return window;}
+        guang.dserver = location.origin + '/';
+        guang.isweb = true;
+    </script>
+    <script src="/static/js/feng.js"></script>
+    <script src="/static/js/stocklist/strategies_meta.js"></script>
+    <script src="/static/js/stocklist/strategyView.js"></script>
+    <script src="/static/js/stocklist/strategyGroupView.js"></script>
+    <script src="/static/js/stocklist/stockListView.js"></script>
     <script>
         let currentUser = null;
         async function loadUserInfo() {
             try {
                 currentUser = await getCurrentUser();
                 common.init_nav_links(currentUser);
+                loadUserStocks();
                 document.getElementById('loading').style.display = 'none';
             } catch (error) {
                 showError(error.message);
                 document.getElementById('loading').style.display = 'none';
+                location.href = '/';
             }
+        }
+        async function getSubAccounts() {
+            const response = await fetch(`${API_BASE}/users/subaccounts`, {
+                credentials: 'include'
+            });
+
+            if (!response.ok) {
+                window.location.href = '/html/login.html';
+                throw new Error('获取子账户列表失败');
+            }
+
+            return await response.json();
+        }
+        async function loadUserStocks() {
+            let users = [currentUser];
+            if (!currentUser?.parent_id) {
+                users = await getSubAccounts();
+            }
+
+            users.forEach(u => {
+                u.name = u.username.includes('.') ? u.username.split('.')[1] : u.username;
+                accld.addAccount(u);
+                ustocks.cache_account(u);
+            });
+
+            accld.show();
         }
         loadUserInfo();
     </script>
