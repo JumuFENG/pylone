@@ -343,10 +343,16 @@ class StrategyBaseView {
     createGuardInputWithSellType(text) {
         var guardDiv = document.createElement('div');
         guardDiv.appendChild(document.createTextNode(text));
+        guardDiv.className = 'calc-target';
         this.inputGuard = document.createElement('input');
         this.inputGuard.style.maxWidth = '120px';
         if (this.strategy.guardPrice !== undefined) {
             this.inputGuard.value = this.strategy.guardPrice;
+        }
+        this.inputGuard.onfocus = () => {
+            if (common?.prc_calc) {
+                common.prc_calc.targetTo(this.inputGuard.parentElement);
+            }
         }
         guardDiv.appendChild(this.inputGuard);
         const cto = this.createSellCountTypeOptions();
@@ -373,8 +379,14 @@ class StrategyBaseView {
     createReferedInputWithSellType(text) {
         var refDiv = document.createElement('div');
         refDiv.appendChild(document.createTextNode(text));
+        refDiv.className = 'calc-target';
         this.inputRefer = document.createElement('input');
         this.inputRefer.style.maxWidth = '120px';
+        this.inputRefer.onfocus = e => {
+            if (common?.prc_calc) {
+                common.prc_calc.targetTo(this.inputRefer.parentElement);
+            }
+        }
         refDiv.appendChild(this.inputRefer);
         const cto = this.createSellCountTypeOptions();
         this.sellCntSelector = cto.selector;

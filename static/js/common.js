@@ -63,6 +63,48 @@ const common = {
         const emStockUrl = 'http://quote.eastmoney.com/concept/';
         const emStockUrlTail = '.html#fullScreenChart';
         return emStockUrl + (code.startsWith('60') || code.startsWith('68') ? 'sh' : 'sz') + code + emStockUrlTail;
+    },
+    prc_calc: {
+        init(price, zdf=10) {
+            this.dirty = this.price != price;
+            this.price = price;
+            this.zdf = zdf;
+        },
+        targetTo(target) {
+            if (!this.root || this.dirty) {
+                if (this.root?.parentElement) {
+                    this.root.parentElement.removeChild(this.root);
+                }
+                this.root = document.createElement('div');
+                this.root.className = 'prc_calc_box';
+                this.root.innerHTML = `
+                    <div style="display: flex;flex-wrap: wrap;justify-content: space-between;">
+                        <span style="font-weight: bold;font-size: 1.3em">简易计算器</span>
+                        <label style="width: 100%">参考价: ${this.price} 
+                            <input id="prc_input" style="width: 55px;" value="${this.price}">
+                            <input id="pct_input" style="width: 35px;"><span>% = </span><span id="prc_calced"></span></label>
+                        <label>涨停价: ${guang.calcZtPrice(this.price, this.zdf)}</label>
+                        <label>+5%: ${guang.calcZtPrice(this.price, 5)}</label><label>+8%: ${guang.calcZtPrice(this.price, 8)} </label>
+                        <label>跌停价: ${guang.calcDtPrice(this.price, this.zdf)}</label>
+                        <label>-5%: ${guang.calcDtPrice(this.price, 5)}</label><label>-8%: ${guang.calcDtPrice(this.price, 8)}</label>
+                    </div>`;
+                this.root.querySelector('#pct_input').oninput = () => {
+                    this.onInputChanged();
+                }
+                this.root.querySelector('#prc_input').oninput = () => {
+                    this.onInputChanged();
+                }
+            }
+            target.appendChild(this.root);
+        },
+        onInputChanged() {
+            let prc = parseFloat(this.root.querySelector('#prc_input').value);
+            let pct = parseFloat(this.root.querySelector('#pct_input').value);
+            if (isNaN(prc) || isNaN(pct)) {
+                return;
+            }
+            this.root.querySelector('#prc_calced').textContent = guang.calcZtPrice(prc, pct);
+        }
     }
 }
 
@@ -174,5 +216,17 @@ class RadioAnchorBar {
             }
         };
         return 0;
+    }
+}
+
+class PrcCalculator {
+    constructor(price, zdf=10) {
+        this.price = price;
+        this.zdf = zdf;
+    }
+
+    reset(price, zdf) {
+        this.price = price;
+        this.zdf = zdf;
     }
 }

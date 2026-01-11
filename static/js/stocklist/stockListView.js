@@ -40,22 +40,11 @@ class StockView {
         this.container = document.createElement('div');
         this.container.classList.add('stock_list_item');
         this.container.id = 'stock_' + stock;
-        this.container.onclick = e => {
-            if (!this.container.parentElement) {
-                return;
-            }
-            if (e.target.closest('.stock_list_item') == this.container) {
-                this.onStockClicked(e.currentTarget, this.stock);
-            } else {
-                e.stopPropagation();
-            }
-        };
         this.divTitle = document.createElement('div');
+        this.divTitle.onclick = e => {
+            this.onStockClicked(this.container, this.stock);
+        }
         this.container.appendChild(this.divTitle);
-        var divDetails = document.createElement('div');
-        this.detailView = document.createElement('div');
-        divDetails.appendChild(this.detailView);
-        this.container.appendChild(divDetails);
         this.showTitle();
     }
 
@@ -74,15 +63,15 @@ class StockView {
         } else if (!stock.holdCount) {
             titlehtml += `<button class="btn-outline btn-bdr-danger" onclick="accld.forgetStock('${this.acc}', '${this.stock}')">删除</button>`
         }
-        this.divTitle.innerHTML = titlehtml;
-        let detailhtml = `
+        titlehtml += `<div>
         最新市值: ${(stock.latestPrice * stock.holdCount).toNarrowFixed(2)} 成本:${stock.holdCost} 数量:${stock.holdCount}
         `;
         if (ustocks?.plannedDividen[stock.code]) {
             var pdiv = ustocks.plannedDividen[stock.code];
             detailhtml += `<br><div class="red">${new Date(pdiv.record).toLocaleDateString('zh-cn', {dateStyle:'full'})} ${pdiv.divdesc}</div>`;
         }
-        this.detailView.innerHTML = detailhtml;
+        titlehtml += '</div>'
+        this.divTitle.innerHTML = titlehtml;
         this.showWarningInTitle();
     }
 
@@ -410,6 +399,9 @@ class StockListPanelPage extends RadioAnchorPage {
         } else {
             common.removeAllChild(this.container);
             this.orderedCodes.forEach(code => this.addStock(code));
+            if (this.currentCode && this.orderedCodes.includes(this.currentCode)) {
+                this.container.querySelector('#stock_' + this.currentCode).firstElementChild.click();
+            }
         }
         // if (!emjyBack.costDog) {
         //     var durl = emjyBack.fha.server + 'stock?act=costdog';
@@ -657,6 +649,9 @@ class StockListPanelPage extends RadioAnchorPage {
         var divContainer = new StockView(this.acc, code);
         divContainer.onStockClicked = (target, code) => {
             const stk = ustocks.stock(this.acc, code);
+            if (common?.prc_calc) {
+                common.prc_calc.init(stk.latestPrice, stk.zdf??guang.getStockZdf(stk.code, stk.name));
+            }
             if (this.strategyGroupView && (!this.currentCode || this.currentCode != stk.code)) {
                 if (this.strategyGroupView) {
                     this.strategyGroupView.saveStrategy();
@@ -670,6 +665,8 @@ class StockListPanelPage extends RadioAnchorPage {
                 this.strategyGroupView.latestPrice = stk.latestPrice;
                 this.strategyGroupView.initUi(this.acc, stk.code, stk.strategies, stk.deals);
                 this.strategyGroupView.toggleDistributeView(false);
+            } else if (this.currentCode == stk.code && target !== this.strategyGroupView.root.parentElement) {
+                target.appendChild(this.strategyGroupView.root);
             }
         };
         this.container.appendChild(divContainer.container);
