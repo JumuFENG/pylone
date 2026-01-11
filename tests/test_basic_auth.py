@@ -111,6 +111,19 @@ def test_basic_auth():
                 print(f"  用户信息: {response.json()}")
             else:
                 print(f"  错误: {response.text}")
+
+            # 6.3 请求 /users/me?auto_refresh=1 来触发服务器端自动刷新（如需要）
+            print("  6.3 请求 /users/me?auto_refresh=1 (尝试自动刷新)...")
+            resp2 = session.get(f"{BASE_URL}/users/me?auto_refresh=1")
+            print(f"  状态码: {resp2.status_code}")
+            if resp2.status_code == 200:
+                try:
+                    print(f"  用户信息: {resp2.json()}")
+                except Exception:
+                    print("  无法解析用户信息")
+                print(f"  Cookie fastapiusersauth present: {'fastapiusersauth' in session.cookies}")
+            else:
+                print(f"  请求失败: {resp2.text}")
         else:
             print(f"  警告: Cookie 未设置")
             print(f"  可用的 cookies: {session.cookies.get_dict()}")

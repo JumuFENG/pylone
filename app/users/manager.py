@@ -25,7 +25,7 @@ from .models import (
 from .schemas import UserRead, UserCreate, UserUpdate
 
 
-cfg = {'jwt_secret': 'JWT_SECRET_SHOULD_CHANGE_IN_PRODUCTION', 'jwt_lifetime_seconds': 86400, 'cookie_secure': False}
+cfg = {'jwt_secret': 'JWT_SECRET_SHOULD_CHANGE_IN_PRODUCTION', 'jwt_lifetime_seconds': 2592000, 'cookie_secure': False}
 cfg.update(Config.client_config())
 
 # Cookie 认证传输

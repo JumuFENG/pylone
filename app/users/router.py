@@ -1,5 +1,5 @@
 from typing import List, Optional
-from fastapi import APIRouter, HTTPException, Depends, Query
+from fastapi import APIRouter, HTTPException, Depends, Query, Request, Response
 from sqlalchemy import select
 from app.db import async_session_maker
 from .manager import (
@@ -8,10 +8,14 @@ from .manager import (
     bearer_auth_backend,
     verify_user,
     get_user_manager,
-    get_current_user_basic
+    get_current_user_basic,
+    get_jwt_strategy,
+    cfg
 )
 from .schemas import UserRead, UserCreate, UserUpdate
 from .models import User
+import jwt
+import time
 
 router = APIRouter()
 
@@ -36,13 +40,37 @@ router.include_router(
 @router.get("/users/me", response_model=UserRead, tags=["users"])
 async def users_me(
     basic_user: Optional[User] = Depends(get_current_user_basic),
-    bearer_user: Optional[User] = Depends(fastapi_users.current_user(optional=True))
+    bearer_user: Optional[User] = Depends(fastapi_users.current_user(optional=True)),
+    request: Request = None,
+    response: Response = None,
+    auto_refresh: bool = Query(default=False)
 ):
     user = basic_user or bearer_user
-    if user:
-        return user
-    else:
+    if not user:
         raise HTTPException(status_code=404, detail="用户不存在")
+
+    token = None
+    if request is not None:
+        token = request.cookies.get('fastapiusersauth')
+    if token and auto_refresh:
+        try:
+            payload = jwt.decode(token, cfg['jwt_secret'], algorithms=["HS256"])
+            exp = payload.get('exp')
+            if exp - int(time.time()) <= 3 * 24 * 3600:
+                new_token = await get_jwt_strategy().write_token(user)
+                response.set_cookie(
+                    'fastapiusersauth',
+                    new_token,
+                    httponly=True,
+                    secure=cfg.get('cookie_secure', False),
+                    max_age=cfg.get('jwt_lifetime_seconds', 0),
+                    path='/'
+                )
+        except Exception:
+            # 忽略解码错误，不影响返回用户信息
+            pass
+
+    return user
 
 @router.patch("/users/{user_id}", response_model=UserRead, tags=["users"])
 async def update_user_protected(

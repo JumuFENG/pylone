@@ -87,7 +87,7 @@ async function logout() {
 }
 
 async function getCurrentUser() {
-    const response = await fetch(`${API_BASE}/users/me`, {
+    const response = await fetch(`${API_BASE}/users/me?auto_refresh=1`, {
         credentials: 'include'
     });
 
