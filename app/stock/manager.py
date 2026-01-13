@@ -215,9 +215,12 @@ class AllStocks:
         if not stocks:
             logger.info('no stocks need to update transactions')
             return
+        if TradingDate.trading_started() and not TradingDate.trading_ended():
+            logger.warning(f'transactions should not updated during trading!')
+            return
 
         tsize = 1000
-        date = TradingDate.max_trading_date()
+        date = TradingDate.max_traded_date()
         tdx = srt.rtsource('tdx')
         ofmt = srt.set_array_format('list')
         for i in range(0, len(stocks), tsize):

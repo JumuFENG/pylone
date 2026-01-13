@@ -772,6 +772,7 @@ const accld = {
     get currentListView() {
         return this.navigator.radioAchors[this.navigator.getHighlighted()];
     },
+    newAddedWatchCode: null,
     onFiltered(fid) {
         this.currentListView.onFiltered(fid);
         if (typeof(fid) === 'string') {
@@ -817,6 +818,7 @@ const accld = {
 
             ustocks.cache_stock(this.currentListView.acc, sbasic);
             this.currentListView.addStock(code);
+            this.newAddedWatchCode = code;
         });
         this.inputWatchCode.value = '';
     },
@@ -911,6 +913,15 @@ const accld = {
         fetch(url, {method: 'POST', body: fd, credentials: 'include'});
     },
     saveStrategy(acc, code, data) {
+        if (this.newAddedWatchCode == code) {
+            const wurl = `${API_BASE}/stock`;
+            const wfd = new FormData();
+            wfd.append('act', 'watch');
+            wfd.append('accid', acc);
+            wfd.append('code', code);
+            fetch(wurl, {method: 'POST', body: wfd, credentials: 'include'});
+            this.newAddedWatchCode = '';
+        }
         const url = `${API_BASE}/stock`;
         const fd = new FormData();
         fd.append('act', 'strategy');

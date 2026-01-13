@@ -160,7 +160,7 @@ async def stock_post(
 ):
     if code:
         code = code.lower()
-    if act in ('deals', 'fixdeals', 'strategy', 'forget', 'costdog', 'rmwatch', 'strategy'):
+    if act in ('deals', 'fixdeals', 'strategy', 'forget', 'costdog', 'watch', 'rmwatch'):
         user = await verify_user(basic_user or bearer_user, acc, accid)
         if act == 'deals':
             await usm.add_deals(user, data)
@@ -170,6 +170,8 @@ async def stock_post(
             await usm.forget_stock(user, code)
         elif act == 'costdog':
             usm.save_costdog(user, data)
+        elif act == 'watch':
+            await usm.watch_stock(user, code)
         elif act == 'rmwatch':
             await usm.forget_stock(user, code)
             bsid = buysid.split(',')
@@ -313,7 +315,7 @@ async def stock_fflow(code: str = Query(..., min_length=6), date: str = Query(No
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/changes")
-async def stock_changes(codes: str = Query(..., min_length=6), start: str = Query(None, min_length=8, max_length=10)):
+async def stock_changes(codes: str = Query(...), start: str = Query(None, min_length=8, max_length=10)):
     try:
         changes = []
         if not codes:

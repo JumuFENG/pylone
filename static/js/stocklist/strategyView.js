@@ -287,6 +287,7 @@ class StrategyBaseView {
         <input type="checkbox" ${this.strategy.enabled === undefined || this.strategy.enabled ? "checked" : ""}>启用
         <span class="desc-tailing">${desc}</span>
         `;
+        this.enabledCheck = checkLbl.querySelector('input');
         return checkLbl;
     }
 
@@ -337,6 +338,7 @@ class StrategyBaseView {
         guardDiv.innerHTML = `${text}
         <input style="max-width: 120px;" value="${this.strategy.guardPrice??''}">
         `;
+        this.inputGuard = guardDiv.querySelector('input');
         return guardDiv;
     }
 
@@ -373,6 +375,7 @@ class StrategyBaseView {
         refDiv.innerHTML = `${text}
         <input style="max-width: 120px;" value="${this.strategy.refer??''}">
         `;
+        this.inputRefer = refDiv.querySelector('input');
         return refDiv;
     }
 
@@ -406,6 +409,7 @@ class StrategyBaseView {
         stepDiv.innerHTML = `${text}
         <input style="max-width: 120px;" value="${this.strategy.stepRate? 100 * this.strategy.stepRate : step}">%
         `;
+        this.inputStep = stepDiv.querySelector('input');
         return stepDiv;
     }
 
@@ -414,6 +418,7 @@ class StrategyBaseView {
         popDiv.innerHTML = `${text}
         <input style="max-width: 120px;" value="${this.strategy.backRate? 100 * this.strategy.backRate : rate}">%
         `;
+        this.inputPop = popDiv.querySelector('input');
         return popDiv;
     }
 
@@ -422,6 +427,7 @@ class StrategyBaseView {
         upDiv.innerHTML = `${text}
         <input style="max-width: 120px;" value="${this.strategy.upRate? 100 * this.strategy.upRate : rate}">%
         `;
+        this.inputUpEarn = upDiv.querySelector('input');
         return upDiv;
     }
 
@@ -430,6 +436,7 @@ class StrategyBaseView {
         vDiv.innerHTML = `${text}
         <input style="max-width: 120px;" value="${this.strategy.guardVol??''}">
         `;
+        this.inputVolGuard = vDiv.querySelector('input');
         return vDiv;
     }
 
@@ -438,6 +445,7 @@ class StrategyBaseView {
         dDiv.innerHTML = `${text}
         <input style="max-width: 120px;" value="${this.strategy.zt0date??''}">
         `;
+        this.inputZt0Date = dDiv.querySelector('input');
         return dDiv;
     }
 
@@ -446,6 +454,7 @@ class StrategyBaseView {
         ctDiv.innerHTML = `${text}
         <input style="max-width: 120px;" value="${this.strategy.count??cnt}">股
         `;
+        this.inputCount = ctDiv.querySelector('input');
         return ctDiv;
     }
 
@@ -454,6 +463,7 @@ class StrategyBaseView {
         amtDiv.innerHTML = `${text}
         <input style="max-width: 120px;" value="${this.strategy.amount??amt}">元
         `;
+        this.inputAmount = amtDiv.querySelector('input');
         return amtDiv;
     }
 
@@ -483,6 +493,7 @@ class StrategyBaseView {
         checkDiv.innerHTML = `<label>
         <input type="checkbox" ${this.strategy.guardBreakBuyReverse ? "checked" : ""}>跌破支撑位后若为反转K线买入, 谨慎勾选.</label>
         `;
+        this.guardBreakReverseCheck = checkDiv.querySelector('input');
         return checkDiv;
     }
 
@@ -525,6 +536,7 @@ class StrategyBaseView {
         dataDiv.innerHTML = `${text??"data"}:
         <input style="max-width: 600px;" value='${JSON.stringify(kv)}'>
         `;
+        this.inputData = dataDiv.querySelector('input');
         return dataDiv;
     }
 }

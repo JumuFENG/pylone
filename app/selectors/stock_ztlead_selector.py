@@ -161,7 +161,7 @@ class StockZtDaily(StockBaseSelector):
             i += 1
 
     async def get_hot_stocks(self, date):
-        zts = await query_values(self.db, ['code', 'time', 'days', 'lbc'], self.db.time == date)
+        zts = await query_values(self.db, ['code', 'time', 'days', 'lbc'], self.db.time >= date, self.db.mkt != 3)
         ztdate = {}
         for c, d, days, lbc in zts:
             if c not in ztdate:

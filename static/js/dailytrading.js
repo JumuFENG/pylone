@@ -246,7 +246,7 @@ GlobalManager.prototype.getStockHistChanges = function(stocks, days=3) {
 GlobalManager.prototype.getStockChanges = function(stocks) {
     let promise;
     if (emjyBack.tradeDayEnded()) {
-        stocks = stocks.map(s => guang.convertToQtCode(s));
+        stocks = stocks?.map(s => guang.convertToQtCode(s))??[];
         const url = `${emjyBack.fha.svr5000}stock/changes?codes=${stocks?.join(',')??''}&start=${emjyBack.last_traded_date}`;
         promise = fetch(url).then(r=>r.json());
     } else {
@@ -1439,6 +1439,7 @@ class PlateListTable {
 
             this.nwbtn = document.createElement('button');
             this.nwbtn.textContent = '←';
+            this.nwbtn.style.margin = '2px 5px';
             this.nwbtn.onclick = () => {
                 if (this.nwbtn.textContent == '←') {
                     this.showWideTable = false;
@@ -1458,12 +1459,12 @@ class PlateListTable {
             // pickdiv.style.display = 'flex';
             pickdiv.textContent = '筛选: 涨幅>';
             this.iptzf = document.createElement('input');
-            this.iptzf.style.maxWidth = '12px';
+            this.iptzf.style.maxWidth = '25px';
             this.iptzf.value = '8';
             pickdiv.appendChild(this.iptzf);
             pickdiv.appendChild(document.createTextNode('涨停数>'));
             this.iptztcnt = document.createElement('input');
-            this.iptztcnt.style.maxWidth = '12px';
+            this.iptztcnt.style.maxWidth = '25px';
             this.iptztcnt.value = '10';
             pickdiv.appendChild(this.iptztcnt);
             hdiv.appendChild(pickdiv);

@@ -898,6 +898,9 @@ class StockBkChanges(BkChanges):
                         ztcnt -= yl['ct']
                     elif yl['t'] == 32:
                         dtcnt -= yl['ct']
+                if ydpos is None or ztcnt is None or dtcnt is None:
+                    logger.warning('invalid ydpos/ztcnt/dtcnt: %s %s', code, yl)
+                    continue
                 ydrow += ydarr
                 ydrow += [ydpos, 2*ydpos-ydct, ztcnt, dtcnt]
                 self.fecthed.append(ydrow)
