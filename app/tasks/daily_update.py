@@ -169,11 +169,14 @@ class DailyUpdater():
         'StockTrippleBullSelector',
         #     'StockEndVolumeSelector'
         ]
-        # selectors = ['StockZtLeadingSelector']
         for s in selectors:
             sel = sfac.get(s)
             logger.info(f'update {s}')
-            await sel.update_pickups()
+            try:
+                await sel.update_pickups()
+            except Exception as e:
+                logger.info(e)
+                logger.debug(traceback.format_exc())
 
     @classmethod
     async def update_twice_selectors(cls):
@@ -190,7 +193,6 @@ class DailyUpdater():
         await self.update_stock_changes()
         await self.update_selectors()
         await self.update_twice_selectors()
-
 
 if __name__ == '__main__':
     loop = asyncio.get_event_loop()

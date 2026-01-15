@@ -40,7 +40,7 @@ async def update_bkchanges_history():
 
 async def update_stock_transactions():
     try:
-        if SystemSettings.get('daily_trans', '0') == '1':
+        if await SystemSettings.get('daily_trans', '0') == '1':
             logger.info('update stock transactions')
             await AllStocks.update_stock_transactions()
     except Exception as e:
