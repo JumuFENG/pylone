@@ -491,9 +491,17 @@ class TestUserStock(unittest.IsolatedAsyncioTestCase):
         deals = await usm.get_deals(self.testuser)
         assert len(deals) > 0, 'deals not found'
 
+    async def test_user_get_archived_deals(self):
+        deals = await usm.get_archived_deals(self.testuser)
+        self.assertTrue(len(deals) > 0)
+
+    async def test_calc_earned(self):
+        user = await query_one_record(User, User.id == 11)
+        await usm.calc_earned(user, '2026-01-09')
+
 
 if __name__ == '__main__':
     # unittest.main()
     suite = unittest.TestSuite()
-    suite.addTest(TestUserStock('test_user_get_deals'))
+    suite.addTest(TestUserStock('test_calc_earned'))
     unittest.TextTestRunner().run(suite)

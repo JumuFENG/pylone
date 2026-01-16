@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>成交管理 - phoniun交易后台</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    <link rel="stylesheet" href="/static/css/deals.css">
+</head>
+<body>
+    <div class="container center-wide">
+        <div id="alert" style="display: none; position: fixed; top: 100px; left: 50%; transform: translateX(-50%);"></div>
+        <div id="loading" class="loading">加载中...</div>
+        <div class="nav">
+            <div ></div>
+            <div class="nav-links">
+            </div>
+        </div>
+        <div class="content">
+            <div class="container center-wide deals-page-header">
+                <div class="deals-toolbar">
+                    <label >
+                        <input type="checkbox" id="checkbox_showfunds" onchange="dlthis.show_deals()">显示基金
+                    </label>
+                    <select id="duration_select" onchange="dlthis.show_deals()">
+                        <option value="yr">当年</option>
+                        <option value="yr1">近1年</option>
+                        <option value="yr.5">近半年</option>
+                        <option value="mth3">近3月</option>
+                        <option value="mth1">近1月</option>
+                        <option value="wk1">近1周</option>
+                        <option value="all">全部</option>
+                    </select>
+                    <select id="date_range_select" onchange="dlthis.date_range_changed()">
+                        <option value="0">一周内清仓</option>
+                        <option value="7">两周内清仓</option>
+                        <option value="14">三周内清仓</option>
+                    </select>
+                    <input type="text" placeholder="代码" id="ipt_filter_code" autocomplete="off" oninput="dlthis.show_deals()">
+                </div>
+                <div class="deals-toolbar">
+                    <select id="deals_category_select" onchange="dlthis.category_changed()"></select>
+                    <input type="text" placeholder="策略存储名" id="new_category_key" autocomplete="off">
+                    <input type="text" placeholder="策略描述" id="new_category_desc" autocomplete="off">
+                    <select id="wksold_code_select" onchange="dlthis.on_wksold_change()"></select>
+                    <button class="btn-second" onclick="dlthis.on_add_deals_click()">添加交易记录</button>
+                </div>
+                <div class="table-container">
+                    <table id="deals-table">
+                        <thead>
+                            <tr>
+                                <th>序号</th>
+                                <th class="sortable" data-column="code">代码</th>
+                                <th class="sortable" data-column="name">名称</th>
+                                <th class="sortable" data-column="typebs">买卖</th>
+                                <th class="sortable" data-column="price">价格</th>
+                                <th class="sortable" data-column="portion">数量</th>
+                                <th class="sortable" data-column="time">日期</th>
+                                <th><input type="checkbox" onchange="dlthis.toggle_all()"></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+    <script src="/static/js/auth.js"></script>
+    <script src="/static/js/common.js"></script>
+    <script src="/static/js/guang.js"></script>
+    <script>
+        window.xreq = function(m) {return window;}
+        guang.dserver = location.origin + '/';
+        guang.isweb = true;
+        let currentUser = null;
+
+        async function loadUserInfo() {
+            try {
+                currentUser = await getCurrentUser();
+                document.getElementById('loading').style.display = 'none';
+            } catch (error) {
+                showError(error.message);
+                document.getElementById('loading').style.display = 'none';
+            }
+            common.init_nav_links(currentUser);
+        }
+
+        window.addEventListener('load', _ => {
+            loadUserInfo();
+            dlthis.init_page();
+            dlthis.get_user_deals();
+        });
+
+        const dlthis = {
+            curWkSold: [],
+            stock_name(code) {
+                return feng.stock_basics[code]?.name ?? code;
+            },
+            category_changed() {
+                const dealCategorySel = document.querySelector('#deals_category_select');
+                if (dealCategorySel.selectedIndex == -1) {
+                    return;
+                }
+                var sopt = dealCategorySel.selectedOptions[0];
+                document.querySelector('#new_category_key').value = sopt.value;
+                document.querySelector('#new_category_desc').value = sopt.text == sopt.value ? '' : sopt.text;
+            },
+            select_deals() {
+                var skey = document.querySelector('#duration_select').value;
+                var sDeals = [];
+                if (skey == 'all') {
+                    sDeals = this.userDeals.map((d, i) => i);
+                } else {
+                    var now = new Date();
+                    var dealstarts = {
+                        'yr': new Date(now.getFullYear(), 0, 1),
+                        'yr1': (new Date(now)).setFullYear(now.getFullYear() - 1),
+                        'yr.5': (new Date(now)).setMonth(now.getMonth() - 6),
+                        'mth3': (new Date(now)).setMonth(now.getMonth() - 3),
+                        'mth1': (new Date(now)).setMonth(now.getMonth() - 1),
+                        'wk1': new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
+                    };
+                    var fkey = document.querySelector('#ipt_filter_code').value;
+                    for (let i = 0; i < this.userDeals.length; i++) {
+                        const dl = this.userDeals[i];
+                        if (new Date(dl.time) > dealstarts[skey]) {
+                            if (!fkey || dl.code.includes(fkey)) {
+                                sDeals.push(i);
+                            }
+                        }
+                    }
+                }
+
+                sDeals.sort((i, j) => {
+                    if (this.userDeals[i].code == this.userDeals[j].code) {
+                        return this.userDeals[i].time > this.userDeals[j].time;
+                    }
+                    return this.userDeals[i].code > this.userDeals[j].code;
+                });
+
+                return sDeals;
+            },
+            get_focused(allidx) {
+                let codes = new Set(allidx.map(i => this.userDeals[i].code));
+                if (codes.size !== 1) {
+                    return [];
+                }
+
+                const date_range = document.querySelector('#date_range_select').value;
+                if (isNaN(date_range)) {
+                    return [];
+                }
+                const now = new Date();
+                const since = guang.dateToString(new Date(now.setDate(now.getDate() - now.getDay() - date_range)), '-');
+                const sellids = allidx.filter(i => this.userDeals[i].time >= since && this.userDeals[i].typebs == 'S');
+                if (sellids.length === 0) {
+                    return [];
+                }
+                let sellportion = sellids.map(i => this.userDeals[i].portion).reduce((a, b) => a + b);
+                let focdeals = [];
+                for (let i = allidx.length - 1; i >= 0; i--) {
+                    const deali = this.userDeals[allidx[i]];
+                    if (deali.typebs == 'B') {
+                        let wkmoday = new Date(deali.time);
+                        wkmoday.setDate(wkmoday.getDate() - wkmoday.getDay());
+                        let wksunday = wkmoday.getTime() + 6 * 24 * 60 * 60 * 1000;
+                        wkmoday = guang.dateToString(wkmoday, '-');
+                        wksunday = guang.dateToString(new Date(wksunday), '-')
+                        let samewk_sell = allidx.filter(k => this.userDeals[k].time >= wkmoday && this.userDeals[k].time <= wksunday && this.userDeals[k].typebs == 'S');
+                        for (const s of samewk_sell) {
+                            if (sellids.includes(s) || focdeals.includes(s)) {
+                                continue;
+                            }
+                            focdeals.push(s);
+                            sellportion += this.userDeals[s].portion;
+                        }
+                        sellportion -= deali.portion;
+                        focdeals.push(allidx[i]);
+                        if (sellportion == 0) {
+                            break;
+                        }
+                    } else if (!sellids.includes(allidx[i]) && !focdeals.includes(allidx[i])) {
+                        focdeals.push(allidx[i]);
+                        sellportion += this.userDeals[allidx[i]].portion;
+                    }
+                }
+                return focdeals.concat(sellids);
+            },
+            show_deals() {
+                tableBody = document.querySelector('#deals-table tbody');
+                tableBody.innerHTML = '';
+                this.checkedDeals = [];
+                document.querySelector('#deals-table th input[type="checkbox"]').checked = false;
+                if (!this.userDeals) {
+                    return;
+                }
+
+                var fDeals = this.select_deals();
+                var n = 1;
+                var showFunds = document.querySelector('#checkbox_showfunds').checked;
+                var focused = this.get_focused(fDeals);
+
+                for (const i of fDeals) {
+                    const deali = this.userDeals[i];
+                    var dcode = deali.code.length == 8 ? deali.code.substring(2) : deali.code;
+                    if (!showFunds && (dcode.startsWith('5') || dcode.startsWith('1'))) {
+                        continue;
+                    }
+                    let row = `<tr class="${focused.includes(i) ? 'focused' : ''}">
+                        <td>${n++}</td>
+                        <td class="code">${dcode}</td>
+                        <td class="name"><a href="${common.stockEmLink(dcode)}" target="_blank">${dlthis.stock_name(deali.code)}</a></td>
+                        <td class="typebs">${deali.typebs}</td>
+                        <td class="price">${deali.price}</td>
+                        <td class="portion">${deali.portion}</td>
+                        <td class="time">${deali.time.split(' ')[0]}</td>
+                        <td><input type="checkbox" data-udidx="${i}" onchange="dlthis.toggle_select_deal(${i})"/></td>
+                        </tr>
+                        `;
+                    tableBody.insertAdjacentHTML('beforeend', row);
+                }
+            },
+            toggle_select_deal(udidx) {
+                if (this.checkedDeals.includes(udidx)) {
+                    this.checkedDeals.splice(this.checkedDeals.indexOf(udidx), 1);
+                } else {
+                    this.checkedDeals.push(udidx);
+                }
+            },
+            toggle_all() {
+                const row_chks = document.querySelectorAll('#deals-table tbody tr input[type="checkbox"]');
+                const all_chk = document.querySelector('#deals-table th input[type="checkbox"]').checked;
+                if (all_chk) {
+                    this.checkedDeals = Array.from(row_chks).map((chk) => parseInt(chk.getAttribute('data-udidx')));
+                    row_chks.forEach(chk => chk.checked = true);
+                } else {
+                    this.checkedDeals = [];
+                    row_chks.forEach(chk => chk.checked = false);
+                }
+            },
+            async get_user_deals() {
+                var url = `${API_BASE}/user/trackdeals?name=archived&realcash=1`;
+                const rsp = await fetch(url, {credentials: 'include'}).then(r=>r.json());
+                this.userDeals = rsp.deals;
+                await feng.getStockBasics(Array.from(new Set(this.userDeals.map(d => d.code))));
+                this.show_deals();
+            },
+            date_range_changed() {
+                const dateRangeSelect = document.querySelector('#date_range_select');
+                const now = new Date();
+                const since = guang.dateToString(new Date(now.setDate(now.getDate() - now.getDay() - dateRangeSelect.value)), '-');
+                const url = `${API_BASE}/user/archivedcodes?realcash=1&since=${since}`
+                fetch(url, {credentials: 'include'}).then(r=>r.json()).then(rsp => {
+                    this.curWkSold = rsp;
+                    this.show_wksold();
+                });
+            },
+            init_page() {
+                var dcUrl = `${API_BASE}/user/dealcategory`;
+                fetch(dcUrl, {credentials: 'include'}).then(r=>r.json()).then(dt => {
+                    const dealCategorySel = document.querySelector('#deals_category_select');
+                    this.dealCategories = dt??[];
+                    for (const dc of this.dealCategories) {
+                        dealCategorySel.appendChild(new Option(dc[1]?dc[1]:dc[0], dc[0]));
+                    }
+                    dealCategorySel.selectedIndex = -1;
+                });
+                document.querySelector('#date_range_select').selectedIndex = -1;
+                document.querySelector('#duration_select').selectedIndex = 0;
+            },
+            show_wksold() {
+                if (!this.curWkSold) {
+                    return;
+                }
+
+                const slselect = document.querySelector('#wksold_code_select');
+                while (slselect.options.length > 0) {
+                    slselect.options.remove(0);
+                }
+                var showFunds = document.querySelector('#checkbox_showfunds').checked;
+                for (const codei of this.curWkSold) {
+                    var dcode = codei.length == 8 ? codei.substring(2) : codei;
+                    if (!showFunds && (dcode.startsWith('5') || dcode.startsWith('1'))) {
+                        continue;
+                    }
+                    slselect.options.add(new Option(dlthis.stock_name(codei), codei));
+                }
+                slselect.selectedIndex = -1;
+            },
+            on_wksold_change() {
+                const slselect = document.querySelector('#wksold_code_select');
+                if (slselect.selectedIndex !== -1) {
+                    const iptFilter = document.querySelector('#ipt_filter_code');
+                    iptFilter.value = slselect.value;
+                    iptFilter.oninput();
+                }
+            },
+            async on_add_deals_click() {
+                if (this.checkedDeals.length == 0) {
+                    return;
+                }
+                const dealCategorySel = document.querySelector('#deals_category_select');
+                const iptNewCategoryKey = document.querySelector('#new_category_key')
+                if (dealCategorySel.selectedIndex == - 1 && !iptNewCategoryKey.value) {
+                    console.error('no category key selected!');
+                    return;
+                }
+                const iptNewCategoryDesc = document.querySelector('#new_category_desc');
+                var track_name = iptNewCategoryKey.value;
+                var track_desc = iptNewCategoryDesc.value;
+                var dlUrl = `${API_BASE}/user/trackdeals`;
+                var fd = new FormData();
+                fd.append('name', track_name);
+                var selectedDesc = dealCategorySel.selectedIndex >= 0 ? dealCategorySel.selectedOptions[0].text : null;
+                if (track_desc && (selectedDesc == track_name || selectedDesc != track_desc)) {
+                    fd.append('desc', track_desc);
+                }
+                if (dealCategorySel.selectedIndex == -1 || dealCategorySel.value != track_name) {
+                    dealCategorySel.options.add(new Option(track_desc??track_name, track_name));
+                    dealCategorySel.value = track_name;
+                }
+                const chkdeals = this.checkedDeals.map(udidx => this.userDeals[udidx]);
+                fd.append('data', JSON.stringify(chkdeals));
+                const rsp = await fetch(dlUrl, {method: 'POST', body: fd, credentials: 'include'});
+                if (!rsp.ok) {
+                    console.error('add deals to', track_name, 'failed!');
+                    return;
+                }
+            }
+        };
+    </script>
+    <script src="/static/js/feng.js"></script>
+</body>
+</html>

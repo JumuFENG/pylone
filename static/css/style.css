@@ -7,7 +7,6 @@
 body {
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
     background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    min-height: 100vh;
     display: flex;
     justify-content: center;
     align-items: center;
@@ -79,7 +78,6 @@ select {
     font-size: 14px;
     transition: border-color 0.3s;
     background-color: white;
-    cursor: pointer;
 }
 
 input[type="email"],
@@ -112,11 +110,13 @@ select:focus {
     transition: transform 0.2s;
 }
 
-.btn:hover {
+.btn:hover,
+.btn-second:hover {
     transform: translateY(-2px);
 }
 
-.btn:active {
+.btn:active,
+.btn-second:active {
     transform: translateY(0);
 }
 
@@ -124,6 +124,15 @@ select:focus {
     background: #6c757d;
     color: white;
     margin-top: 10px;
+}
+
+.btn-second {
+    padding: 3px 12px;
+    background: #667eea;
+    color: white;
+    border-radius: 5px;
+    border: none;
+    transition: all 0.2s ease;
 }
 
 .btn-danger {

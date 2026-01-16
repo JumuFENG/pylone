@@ -714,6 +714,25 @@ async def migrate_selectors():
     for tbl in sel_tables:
         await migrate_table_as_is('stock_center', 'pylone', tbl, unique_keys=['date', 'code'])
 
+async def migrate_trackdeals():
+    import stockrt
+    tables = ['track_hsrzt0', 'track_hslead', 'track_zt1wb']
+    to_table = 'user_track_deals'
+    conn = await get_connection()
+    columns_mapping = {
+        'code': 'code',
+        'time': 'date',
+        'typebs': 'type',
+        'sid': '委托编号',
+        'price': 'price',
+        'portion': 'portion',
+        'tkey': '',
+        'user_id': '',
+    }
+    for tbl in tables:
+        def transform_func(row):
+            return (stockrt.get_fullcode(row[0]),) + row[1:] + (tbl, 10)
+        await migrate_table(conn, 'stock_center', 'pylone', tbl, to_table, columns_mapping, unique_keys=[0, 1, 2, 3], transform_func=transform_func)
 
 
 if __name__ == '__main__':
@@ -733,4 +752,5 @@ if __name__ == '__main__':
     # loop.run_until_complete(migrate_day_dt_stocks())
     # loop.run_until_complete(migrate_stock_dt_map())
     # loop.run_until_complete(migrate_user_data())
-    loop.run_until_complete(migrate_selectors())
+    # loop.run_until_complete(migrate_selectors())
+    loop.run_until_complete(migrate_trackdeals())

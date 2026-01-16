@@ -3,10 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>登录 - phoniun交易后台</title>
+    <title>登录 - phoniun交易系统</title>
     <link rel="stylesheet" href="/static/css/style.css">
 </head>
-<body>
+<body style="min-height:100vh;">
     <div class="container center">
         <h1>用户登录</h1>
         <div id="alert" style="display: none; position: fixed; top: 100px; left: 50%; transform: translateX(-50%);"></div>
@@ -38,7 +38,7 @@
                 await login(email, password);
                 showSuccess('登录成功！');
                 setTimeout(() => {
-                    window.location.href = '/html/profile.html';
+                    window.location.href = '/html/index.html';
                 }, 1000);
             } catch (error) {
                 showError(error.message);

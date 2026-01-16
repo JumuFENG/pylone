@@ -604,7 +604,11 @@ class StockListPanelPage extends RadioAnchorPage {
             return;
         };
 
-        ustocks.stock(this.acc, code).strategies = strGrp;
+        let stk = ustocks.stock(this.acc, code)
+        if (!stk) {
+            return;
+        }
+        stk.strategies = strGrp;
     }
 
     fix_date_price(stock) {
@@ -649,10 +653,13 @@ class StockListPanelPage extends RadioAnchorPage {
         var divContainer = new StockView(this.acc, code);
         divContainer.onStockClicked = (target, code) => {
             const stk = ustocks.stock(this.acc, code);
-            if (common?.prc_calc) {
+            if (!stk) {
+                console.log('no stock data', code);
+            }
+            if (common?.prc_calc && stk) {
                 common.prc_calc.init(stk.latestPrice, stk.zdf??guang.getStockZdf(stk.code, stk.name));
             }
-            if (this.strategyGroupView && (!this.currentCode || this.currentCode != stk.code)) {
+            if (this.strategyGroupView && (!this.currentCode || this.currentCode != code)) {
                 if (this.strategyGroupView) {
                     this.strategyGroupView.saveStrategy();
                     this.onStrategyGroupChanged(this.currentCode, this.strategyGroupView.strGrp);
@@ -665,7 +672,7 @@ class StockListPanelPage extends RadioAnchorPage {
                 this.strategyGroupView.latestPrice = stk.latestPrice;
                 this.strategyGroupView.initUi(this.acc, stk.code, stk.strategies, stk.deals);
                 this.strategyGroupView.toggleDistributeView(false);
-            } else if (this.currentCode == stk.code && target !== this.strategyGroupView.root.parentElement) {
+            } else if (this.currentCode == code && target !== this.strategyGroupView.root.parentElement) {
                 target.appendChild(this.strategyGroupView.root);
             }
         };

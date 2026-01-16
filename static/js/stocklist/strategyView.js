@@ -534,7 +534,7 @@ class StrategyBaseView {
             kv[k] = this.strategy[k];
         }
         dataDiv.innerHTML = `${text??"data"}:
-        <input style="max-width: 600px;" value='${JSON.stringify(kv)}'>
+        <input style="width:100%; max-width: 600px;" value='${JSON.stringify(kv)}'>
         `;
         this.inputData = dataDiv.querySelector('input');
         return dataDiv;

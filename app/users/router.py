@@ -1,6 +1,10 @@
+import jwt
+import time
+import json
 from typing import List, Optional
 from fastapi import APIRouter, HTTPException, Depends, Query, Request, Response
 from sqlalchemy import select
+from app import PostParams, pparam_doc
 from app.db import async_session_maker
 from .manager import (
     fastapi_users,
@@ -10,12 +14,12 @@ from .manager import (
     get_user_manager,
     get_current_user_basic,
     get_jwt_strategy,
-    cfg
+    cfg,
+    UserStockManager as usm
 )
 from .schemas import UserRead, UserCreate, UserUpdate
 from .models import User
-import jwt
-import time
+
 
 router = APIRouter()
 
@@ -152,4 +156,62 @@ async def get_userbind(
         result = await session.execute(select(User).where(User.parent_id == parent_id))
         users = result.scalars().all()
     return users
- 
+
+async def owner_user(user: User):
+    if user.parent_id:
+        async for user_manager in get_user_manager():
+            return await user_manager.get(user.parent_id)
+    return user
+
+@router.get("/user/dealcategory")
+async def get_dealcategory(
+    basic_user: Optional[User] = Depends(get_current_user_basic),
+    bearer_user: Optional[User] = Depends(fastapi_users.current_user(optional=True))
+):
+    user = await owner_user(basic_user or bearer_user)
+    dcat = await usm.get_dealcategory(user)
+    return [list(d) for d in dcat]
+
+@router.get("/user/trackdeals")
+async def get_trackdeals(
+    name: Optional[str] = Query(default=None),
+    realcash: Optional[bool] = Query(default=False),
+    acc: Optional[str] = Query(None, embed=True),
+    accid: Optional[int] = Query(None, embed=True),
+    basic_user: Optional[User] = Depends(get_current_user_basic),
+    bearer_user: Optional[User] = Depends(fastapi_users.current_user(optional=True))
+):
+    if name != 'archived':
+        user = await verify_user(basic_user or bearer_user, acc, accid)
+        return await usm.get_track_deals(user, name)
+    else:
+        ds = await usm.get_archived_deals(basic_user or bearer_user, realcash)
+        return {'tname':name, 'deals': ds}
+
+@router.post("/user/trackdeals", openapi_extra=pparam_doc([
+    ("name", "string", "name", True),
+    ("desc", "string", "desc", False),
+    ("data", "string", "{}", False),
+    ("acc", "string", "test", False),
+    ("accid", "string", "8", False)
+]))
+async def track_deals(
+    name: Optional[str] = PostParams.create("name", default=None),
+    desc: Optional[int] = PostParams.create("desc", default=None),
+    data: Optional[str] = PostParams.create("data", default=None),
+    acc: Optional[str] = PostParams.create("acc", default=None),
+    accid: Optional[int] = PostParams.create("accid", default=None),
+    basic_user: Optional[User] = Depends(get_current_user_basic),
+    bearer_user: Optional[User] = Depends(fastapi_users.current_user(optional=True))
+):
+    user = await verify_user(basic_user or bearer_user, acc, accid)
+    await usm.add_track_deals(user, name, json.loads(data), desc)
+
+@router.get("/user/archivedcodes")
+async def get_archivedcodes(
+    since: Optional[str] = Query(default=None),
+    realcash: Optional[int] = Query(default=0),
+    basic_user: Optional[User] = Depends(get_current_user_basic),
+    bearer_user: Optional[User] = Depends(fastapi_users.current_user(optional=True))
+):
+    return list(await usm.get_archived_code_since(basic_user or bearer_user, since, realcash, True))

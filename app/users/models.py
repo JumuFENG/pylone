@@ -121,7 +121,7 @@ class UserEarning(Base):
     )
 
 
-class DealsTable:
+class BasicDeals:
     user_id = Column(Integer, nullable=False)
     time = Column(String(20))
     code = Column(String(10))
@@ -129,6 +129,9 @@ class DealsTable:
     sid = Column(String(10))
     price = Column(Float)
     portion = Column(Integer)
+
+
+class DealsTable(BasicDeals):
     fee = Column(Float)
     feeYh = Column(Float)
     feeGh = Column(Float)
@@ -189,3 +192,26 @@ class UserStockSell(Base):
     __table_args__ = (
         PrimaryKeyConstraint('user_id', 'time', 'code', 'sid', name='pk_user_stock_sell'),
     )
+
+
+class UserTrackNames(Base):
+    __tablename__ = "user_track_names"
+
+    user_id = Column(Integer, nullable=False)
+    tkey = Column(String(64))
+    tname = Column(String(255))
+
+    __table_args__ = (
+        PrimaryKeyConstraint('user_id', 'tkey', name='pk_user_track_names'),
+    )
+
+
+class UserTrackDeals(Base, BasicDeals):
+    __tablename__ = "user_track_deals"
+
+    tkey = Column(String(64))
+
+    __table_args__ = (
+        PrimaryKeyConstraint('user_id', 'tkey', 'time', 'code', 'sid', name='pk_user_track_deals'),
+    )
+

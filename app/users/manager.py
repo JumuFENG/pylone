@@ -21,7 +21,7 @@ from app.stock.date import TradingDate
 from app.stock.quotes import Quotes as qot
 from .models import (
     User, UserStocks, UserStrategy, UserOrders, UserFullOrders, UserUnknownDeals, UserArchivedDeals, UserStockBuy, UserStockSell,
-    UserEarned, UserEarning)
+    UserEarned, UserEarning, UserTrackNames, UserTrackDeals)
 from .schemas import UserRead, UserCreate, UserUpdate
 
 
@@ -190,7 +190,7 @@ class UserStockManager():
         if isinstance(deals, str):
             deals = json.loads(deals)
 
-        deals = [{**dl, 'code': dl['code'].lower()} for dl in deals]
+        deals = [{**dl, 'code': dl['code'].lower(), 'sid': str(dl['sid'])} for dl in deals]
 
         dlarr = []
         udeals = []
@@ -406,7 +406,7 @@ class UserStockManager():
             fee = 0 if sr['fee'] is None else sr['fee']
             fee += 0 if sr['feeYh'] is None else sr['feeYh']
             fee += 0 if sr['feeGh'] is None else sr['feeGh']
-            sells.append({'date': sr['time'], 'price':sr['price'], 'ptn': sr['portion'], 'fee': fee})
+            sells.append({'date': sr['time'].split()[0], 'price':sr['price'], 'ptn': sr['portion'], 'fee': fee})
 
         buy_rec = await query_values(UserStockBuy, None, UserStockBuy.user_id == user.id, UserStockBuy.code == code)
         buy_rec = array_to_dict_list(UserStockBuy, buy_rec)
@@ -415,7 +415,7 @@ class UserStockManager():
             fee = 0 if br['fee'] is None else br['fee']
             fee += 0 if br['feeYh'] is None else br['feeYh']
             fee += 0 if br['feeGh'] is None else br['feeGh']
-            buys.append({'date': br['time'], 'price':br['price'], 'ptn': br['portion'], 'fee': fee})
+            buys.append({'date': br['time'].split()[0], 'price':br['price'], 'ptn': br['portion'], 'fee': fee})
         return cls.sell_earned_by_day(buys, sells)
 
     @staticmethod
@@ -462,7 +462,7 @@ class UserStockManager():
             fee = 0 if sr['fee'] is None else sr['fee']
             fee += 0 if sr['feeYh'] is None else sr['feeYh']
             fee += 0 if sr['feeGh'] is None else sr['feeGh']
-            sells.append({'date': sr['time'], 'price':sr['price'], 'ptn': sr['portion'], 'fee': fee})
+            sells.append({'date': sr['time'].split()[0], 'price':sr['price'], 'ptn': sr['portion'], 'fee': fee})
 
         if len(sells) == 0:
             return None
@@ -474,7 +474,7 @@ class UserStockManager():
             fee = 0 if br['fee'] is None else br['fee']
             fee += 0 if br['feeYh'] is None else br['feeYh']
             fee += 0 if br['feeGh'] is None else br['feeGh']
-            buys.append({'date': br['time'], 'price':br['price'], 'ptn': br['portion'], 'fee': fee})
+            buys.append({'date': br['time'].split()[0], 'price':br['price'], 'ptn': br['portion'], 'fee': fee})
         return cls.sell_earned_by_day(buys, sells)
 
     @classmethod
@@ -487,7 +487,7 @@ class UserStockManager():
             return
         dt, ed, totalEarned = lastEarned.date, lastEarned.earned, lastEarned.total_earned
         if dt > date:
-            logger.warning('can not set earned for date earlier than %s', dt)
+            logger.warning('can not set earned for date earlier than %s date %s, user %s', dt, date, user.username)
             return
         if dt == date:
             logger.warning('earned already exists: %s %s %s', dt, ed, totalEarned)
@@ -824,14 +824,14 @@ class UserStockManager():
             return deals
 
         slvs = await query_values(User, None, User.parent_id == user.id)
-        slvs = [User(**u) for u in slvs]
+        slvs = [u for u in slvs if u.realcash == 1]
         for u in slvs:
             deals += await cls.get_archived_deals(u)
         return deals
 
     @classmethod
     async def get_archived_code_since(cls, user: User, date, realcash=0, excludehold=False):
-        codes = await query_values(UserArchivedDeals, ['code'], UserArchivedDeals.user_id == user.id, UserArchivedDeals.time > date, UserArchivedDeals.type == 'S')
+        codes = await query_values(UserArchivedDeals, ['code'], UserArchivedDeals.user_id == user.id, UserArchivedDeals.time > date, UserArchivedDeals.typebs == 'S')
         codes = {r for r, in codes}
         if excludehold:
             excode = await query_values(UserStocks, ['code'], UserStocks.user_id == user.id, UserStocks.portion_hold > 0)
@@ -841,7 +841,7 @@ class UserStockManager():
             return codes
 
         slvs = await query_values(User, None, User.parent_id == user.id)
-        slvs = [User(**u) for u in slvs]
+        slvs = [u for u in slvs if u.realcash == 1]
         for u in slvs:
             codes |= await cls.get_archived_code_since(u, date, 0, excludehold)
         return codes
@@ -928,17 +928,21 @@ class UserStockManager():
         await delete_records(UserFullOrders, UserFullOrders.user_id == user.id, UserFullOrders.code == code)
 
     @classmethod
-    async def watchings_with_strategy(self, user: User):
+    async def watchings_with_strategy(cls, user: User):
         if user.realcash == 1:
             slst = await query_values(UserStocks, ['code', 'aver_price', 'portion_hold'], UserStocks.user_id == user.id, UserStocks.keep_eye == 1)
         else:
             slst = await query_values(UserStocks, ['code', 'aver_price', 'portion_hold'], UserStocks.user_id == user.id, UserStocks.keep_eye == 1, UserStocks.portion_hold > 0)
-        return {s[0]: {'holdCost':s[1], 'holdCount': s[2], 'strategies': await self.load_strategy(user, s[0])} for s in slst}
+        return {s[0]: {'holdCost':s[1], 'holdCount': s[2], 'strategies': await cls.load_strategy(user, s[0])} for s in slst}
 
     @classmethod
-    async def watching_stocks(self, user: User):
+    async def watching_stocks(cls, user: User):
         slst = await query_values(UserStocks, ['code', 'aver_price', 'portion_hold'], UserStocks.user_id == user.id, UserStocks.keep_eye == 1)
         return [s[0] for s in slst]
+
+    @classmethod
+    async def watch_stock(cls, user: User, code: str):
+        await upsert_one(UserStocks, {'user_id': user.id, 'code': code, 'amount': 0, 'uramount': '', 'keep_eye': 1}, ['user_id', 'code'])
 
     @classmethod
     async def forget_stock(cls, user: User, code: str):
@@ -984,3 +988,36 @@ class UserStockManager():
     def remove_user_stock_with_deals(cls, user: User, watch: dict|str):
         pass
 
+    @classmethod
+    async def get_dealcategory(cls, user: User):
+        return await query_values(UserTrackNames, ['tkey', 'tname'], UserTrackNames.user_id == user.id)
+
+    @classmethod
+    async def add_track_deals(cls, user: User, tkey: str, deals: list[dict], desc: str = None):
+        tname = await query_one_value(UserTrackNames, UserTrackNames.tname, UserTrackNames.tkey == tkey, UserTrackNames.user_id == user.id)
+        if tname is None or (desc is not None and tname != desc):
+            await upsert_one(UserTrackNames, {'user_id': user.id, 'tkey': tkey, 'tname': desc}, ['user_id', 'tkey'])
+
+        values = []
+        for deal in deals:
+            values.append({
+                'user_id': user.id, 'tkey': tkey,
+                **{k:v for k,v in deal.items() if k in ('time', 'code', 'typebs', 'sid', 'price', 'portion')}
+            })
+        if len(values) > 0:
+            await upsert_many(UserTrackDeals, values, ['user_id', 'tkey', 'time', 'code', 'typebs', 'sid'])
+
+    @classmethod
+    async def get_track_deals(cls, user: User, tkey: str):
+        deals = await query_values(UserTrackDeals, ['time', 'code', 'typebs', 'sid', 'price', 'portion'], UserTrackDeals.user_id == user.id, UserTrackDeals.tkey == tkey)
+        track = {'tname': tkey}
+        ds = []
+        for d,c,tp,sid,pr,ptn in deals:
+            fee = 0
+            if user.username.endswith(('.normal', '.collat')):
+                fYhGh = await query_one_record(UserArchivedDeals, UserArchivedDeals.user_id == user.id, UserArchivedDeals.code == c, UserArchivedDeals.time == d, UserArchivedDeals.typebs == tp, UserArchivedDeals.sid == sid)
+                if fYhGh is not None:
+                    fee = round(fYhGh.fee + fYhGh.feeYh + fYhGh.feeGh, 3)
+            ds.append({'code': c, 'time': d, 'typebs': tp, 'sid': sid, 'price': pr, 'portion': ptn, 'fee': fee})
+        track['deals'] = ds
+        return track

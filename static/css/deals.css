@@ -1,0 +1,61 @@
+.deals-page-header input {
+    width: auto;
+}
+
+.deals-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    max-width: 600px;
+}
+
+.deals-toolbar input[type="text"],select,label,button {
+    width: 120px;
+}
+
+.deals-toolbar select {
+    height: 30px;
+}
+
+.table-container {
+    max-width: 600px;
+    box-shadow: 0 2px 15px rgba(0, 0, 0, 0.1);
+    border-radius: 12px;
+    overflow: hidden;
+}
+table {
+    width: 100%;
+    border-collapse: collapse;
+    background-color: #fff;
+}
+th, td {
+    padding: 4px;
+    text-align: left;
+    border-bottom: 1px solid #ddd;
+}
+th {
+    background-color: #E2E9F5; /* 更改表头颜色 */
+    color: #459dbf;
+    cursor: pointer;
+}
+th.sortable:hover {
+    background-color: #87CEEB; /* 更改表头悬停颜色 */
+    color: white;
+}
+tr:hover {
+    background-color: #f1f1f1;
+}
+tr.focused {
+    background-color: #e1f0ff;
+}
+td.name {
+    color: #007bff; /* 蓝色 */
+    cursor: pointer; /* 指针样式 */
+    text-decoration: underline; /* 下划线 */
+    white-space: nowrap;
+    max-width: 65px;
+}
+
+td.name:hover {
+    color: #0056b3; /* 悬停时的颜色 */
+}
