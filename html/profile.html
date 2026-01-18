@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>个人信息 - phoniun交易后台</title>
+    <title>个人信息 - phoniun交易系统</title>
     <link rel="stylesheet" href="/static/css/style.css">
 </head>
 <body>
@@ -127,18 +127,6 @@
                 showError(error.message);
                 document.getElementById('loading').style.display = 'none';
             }
-        }
-
-        async function getSubAccounts() {
-            const response = await fetch(`${API_BASE}/users/subaccounts`, {
-                credentials: 'include'
-            });
-
-            if (!response.ok) {
-                throw new Error('获取子账户列表失败');
-            }
-
-            return await response.json();
         }
 
         async function loadSubAccounts() {

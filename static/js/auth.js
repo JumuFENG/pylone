@@ -101,6 +101,18 @@ async function getCurrentUser() {
     return await response.json();
 }
 
+async function getSubAccounts() {
+    const response = await fetch(`${API_BASE}/users/subaccounts`, {
+        credentials: 'include'
+    });
+
+    if (!response.ok) {
+        throw new Error('获取子账户列表失败');
+    }
+
+    return await response.json();
+}
+
 async function updateUser(userId, data) {
     const response = await fetch(`${API_BASE}/users/${userId}`, {
         method: 'PATCH',

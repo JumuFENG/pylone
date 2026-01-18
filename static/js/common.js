@@ -9,6 +9,7 @@ const common = {
         return `
             <a href="/html/stocks.html" class="${location.pathname === '/html/stocks.html' ? 'active' : '' }">持仓管理</a>
             <a href="/html/deals.html" class="${location.pathname === '/html/deals.html' ? 'active' : '' }">成交管理</a>
+            <a href="/html/earning.html" class="${location.pathname === '/html/earning.html' ? 'active' : '' }">收益率</a>
             <a href="/html/profile.html" class="${location.pathname === '/html/profile.html' ? 'active' : '' }">个人信息</a>`;
     },
     admin_links() {

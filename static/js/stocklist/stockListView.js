@@ -59,9 +59,9 @@ class StockView {
         `
         const account = ustocks.account(this.acc);
         if (!account.realcash) {
-            titlehtml += `<button class="btn-outline btn-bdr-danger" title="错误的记录或者实际无法买入的情况需要舍弃." onclick="accld.removeWatch('${this.acc}', '${this.stock}')">舍弃</button>`
+            titlehtml += `<button class="btn-outline btn-bdr-danger" title="错误的记录或者实际无法买入的情况需要舍弃." onclick="accld.removeWatch(event, '${this.acc}', '${this.stock}');">舍弃</button>`
         } else if (!stock.holdCount) {
-            titlehtml += `<button class="btn-outline btn-bdr-danger" onclick="accld.forgetStock('${this.acc}', '${this.stock}')">删除</button>`
+            titlehtml += `<button class="btn-outline btn-bdr-danger" onclick="accld.forgetStock(event, '${this.acc}', '${this.stock}');">删除</button>`
         }
         titlehtml += `<div>
         最新市值: ${(stock.latestPrice * stock.holdCount).toNarrowFixed(2)} 成本:${stock.holdCost} 数量:${stock.holdCount}
@@ -882,7 +882,8 @@ const accld = {
         }
         this.costDogFilter.selectedIndex = -1;
     },
-    removeWatch(acc, code) {
+    removeWatch(evt, acc, code) {
+        evt.stopPropagation();
         const rmurl = `${API_BASE}/stock`;
         const stock = ustocks.stock(acc, code);
         const fd = new FormData();
@@ -899,7 +900,8 @@ const accld = {
         ustocks.remove_stock(acc, code);
         this.navigator.radioAchors[this.navigator.getHighlighted()]?.removeStock(code);
     },
-    forgetStock(acc, code) {
+    forgetStock(evt, acc, code) {
+        evt.stopPropagation();
         const rmurl = `${API_BASE}/stock`;
         const fd = new FormData();
         fd.append('act', 'forget');

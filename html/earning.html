@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>收益率 - phoniun交易系统</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    <link rel="stylesheet" href="/static/css/deals.css">
+</head>
+<body>
+    <div class="container" style="width: 95%;">
+        <div id="alert" style="display: none; position: fixed; top: 100px; left: 50%; transform: translateX(-50%);"></div>
+        <div id="loading" class="loading">加载中...</div>
+        <div class="nav">
+            <div style="margin-left: 150px;">查看各种策略或账户的收益率曲线</div>
+            <div class="nav-links">
+            </div>
+        </div>
+        <div style="width: 80%; margin-left: 150px;">
+            <select id="category_select" onchange="show_earing_chart()"></select>
+        </div>
+        <div class="content">
+            <div id="deals-chart" style="width: 100%; height: 600px;"></div>
+        </div>
+        <div></div>
+    </div>
+    <script src="/static/vender/echarts.js"></script>
+    <script src="/static/js/auth.js"></script>
+    <script src="/static/js/common.js"></script>
+    <script src="/static/js/guang.js"></script>
+    <script>
+        window.xreq = function(m) {return window;}
+        guang.dserver = location.origin + '/';
+        guang.isweb = true;
+        let currentUser = null;
+
+        async function loadUserInfo() {
+            try {
+                currentUser = await getCurrentUser();
+                document.getElementById('loading').style.display = 'none';
+            } catch (error) {
+                showError(error.message);
+                document.getElementById('loading').style.display = 'none';
+            }
+            common.init_nav_links(currentUser);
+        }
+
+        async function init_page() {
+            const dt = await dealcommon.get_dealcategory();
+            const dealCategorySel = document.querySelector('#category_select');
+            for (const dc of dt) {
+                dealCategorySel.appendChild(new Option(dc[1]?dc[1]:dc[0], dc[0]));
+            }
+            const users = await getSubAccounts();
+            for (const user of users) {
+                if (user.realcash) {
+                    continue;
+                }
+                const trackname = user.nickname || user.username.split('.')[1];
+                dealCategorySel.appendChild(new Option(trackname, user.id));
+            }
+            dealCategorySel.appendChild(new Option('实盘', 'archived'));
+            dealCategorySel.selectedIndex = -1;
+        }
+
+        async function show_earing_chart() {
+            const selopt = document.querySelector('#category_select').selectedOptions[0];
+            let accid = selopt.value;
+            let category = selopt.text;
+            if (isNaN(accid)) {
+                category = selopt.value;
+                accid = null;
+            }
+            dealcommon.show_earing_chart(category, accid, document.querySelector('#deals-chart'), selopt.text);
+        }
+
+        window.addEventListener('load', _ => {
+            loadUserInfo();
+            init_page();
+        });
+    </script>
+    <script src="/static/js/feng.js"></script>
+    <script src="/static/js/deals/deals.js"></script>
+</body>
+</html>

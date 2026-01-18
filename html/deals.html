@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>成交管理 - phoniun交易后台</title>
+    <title>成交管理 - phoniun交易系统</title>
     <link rel="stylesheet" href="/static/css/style.css">
     <link rel="stylesheet" href="/static/css/deals.css">
 </head>
@@ -12,7 +12,7 @@
         <div id="alert" style="display: none; position: fixed; top: 100px; left: 50%; transform: translateX(-50%);"></div>
         <div id="loading" class="loading">加载中...</div>
         <div class="nav">
-            <div ></div>
+            <div >将成交记录进行归类</div>
             <div class="nav-links">
             </div>
         </div>
@@ -240,9 +240,7 @@
                 }
             },
             async get_user_deals() {
-                var url = `${API_BASE}/user/trackdeals?name=archived&realcash=1`;
-                const rsp = await fetch(url, {credentials: 'include'}).then(r=>r.json());
-                this.userDeals = rsp.deals;
+                this.userDeals = await dealcommon.get_track_deals('archived', 1);
                 await feng.getStockBasics(Array.from(new Set(this.userDeals.map(d => d.code))));
                 this.show_deals();
             },
@@ -257,11 +255,9 @@
                 });
             },
             init_page() {
-                var dcUrl = `${API_BASE}/user/dealcategory`;
-                fetch(dcUrl, {credentials: 'include'}).then(r=>r.json()).then(dt => {
+                dealcommon.get_dealcategory().then(dt => {
                     const dealCategorySel = document.querySelector('#deals_category_select');
-                    this.dealCategories = dt??[];
-                    for (const dc of this.dealCategories) {
+                    for (const dc of dt) {
                         dealCategorySel.appendChild(new Option(dc[1]?dc[1]:dc[0], dc[0]));
                     }
                     dealCategorySel.selectedIndex = -1;
@@ -331,5 +327,6 @@
         };
     </script>
     <script src="/static/js/feng.js"></script>
+    <script src="/static/js/deals/deals.js"></script>
 </body>
 </html>
