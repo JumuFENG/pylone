@@ -70,9 +70,13 @@ class TimerTask:
 
     async def _call_execute_task(self):
         """统一调度异步任务"""
-        result = self.execute_task()
-        if inspect.iscoroutine(result):
-            await result
+        try:
+            result = self.execute_task()
+            if inspect.iscoroutine(result):
+                await result
+        except Exception as e:
+            logger.error(f"定时任务 {self.function.__name__ if self.function else self.__class__.__name__} 执行失败：{e}")
+            logger.debug(format_exc())
         # 如果是同步函数，直接返回结果
 
     def execute_task(self):
@@ -116,6 +120,8 @@ class TimerTask:
 
                 # 下次执行前等待
                 sleep_duration = self._calculate_next_sleep_duration()
+                if self.interval >= 60:
+                    logger.info(f"定时任务 {self.function.__name__ if self.function else self.__class__.__name__} sleep {sleep_duration}")
                 await asyncio.sleep(sleep_duration)
 
         except asyncio.CancelledError:
@@ -151,13 +157,18 @@ class TimerTask:
 
 class BkChangesTask(TimerTask):
     def __init__(self):
-        super().__init__(600, '9:30:40', '15:1:6', [('11:30:01', '12:50:40')])
+        super().__init__(600, '9:30:40', '15:1:6', [('11:30:01', '13:0:40')])
 
     async def execute_task(self):
         bkchanges = await AllBlocks.bkchanges.getLatestChanges()
-        await AllBlocks.bkchanges.saveChanges(bkchanges)
+        if len(bkchanges) > 0:
+            logger.info('em bks to load %d: %s %s', len(bkchanges), bkchanges[0], bkchanges[-1])
+            await AllBlocks.bkchanges.saveChanges(bkchanges)
+
         clsbkchanges = await AllBlocks.clsbkchanges.getLatestChanges()
-        await AllBlocks.clsbkchanges.saveChanges(clsbkchanges)
+        if len(clsbkchanges) > 0:
+            logger.info('cls bks to load %d: %s %s', len(clsbkchanges), clsbkchanges[0], clsbkchanges[-1])
+            await AllBlocks.clsbkchanges.saveChanges(clsbkchanges)
 
 
 class StockMarketStatsTask(TimerTask):

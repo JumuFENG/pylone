@@ -30,7 +30,7 @@ def get_cache(ttl=None):
         return offline_cache
 
 def make_cache_key(func: Callable, args: tuple, kwargs: dict) -> str:
-    return f"{func.__name__}:{args}:{tuple(sorted(kwargs.items()))}"
+    return f"{func.__qualname__}:{args}:{tuple(sorted(kwargs.items()))}"
 
 def dynamic_cache(ttl: int | None = None):
     return _make_async_cache_decorator(get_cache, has_ttl=True)(ttl)

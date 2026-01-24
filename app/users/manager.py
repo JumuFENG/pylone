@@ -676,7 +676,7 @@ class UserStockManager():
         await insert_many(dealtable, deals)
 
     @classmethod
-    async def replace_orders(self, ordtable, user, code, orders):
+    async def replace_orders(cls, ordtable, user, code, orders):
         for i, order in enumerate(orders):
             if 'code' not in order or order['code'] != code:
                 order['code'] = code
@@ -686,12 +686,19 @@ class UserStockManager():
             if 'time' not in orders[i]:
                 orders[i]['time'] = order['date']
             if 'sid' not in orders[i]:
-                orders[i]['sid'] = self.fake_sid()
+                orders[i]['sid'] = cls.fake_sid()
             if 'portion' not in orders[i]:
                 orders[i]['portion'] = order['count']
 
+        unique_orders = {}
+        for order in orders:
+            key = (order['user_id'], order['code'], order['time'], order['sid'])
+            unique_orders[key] = order
+        orders = list(unique_orders.values())
+
         await delete_records(ordtable, ordtable.user_id == user.id, ordtable.code == code)
-        await insert_many(ordtable, orders)
+        if orders:
+            await insert_many(ordtable, orders)
 
     @classmethod
     async def remove_deals(cls, user: User, code: str, bsid: list[str], ssid: list[str]):
@@ -737,11 +744,15 @@ class UserStockManager():
         rembuy = None
         bportion = 0
         delbuy = []
+        delsell = []
         for srec in sell_rec:
             consumed += (code, srec['time'], 'S', srec['portion'], srec['price'], srec['fee'], srec['feeYh'], srec['feeGh'], srec['sid']),
-            await delete_records(UserStockSell, UserStockSell.user_id == user.id, UserStockSell.code == code, UserStockSell.time == srec['time'], UserStockSell.sid == srec['sid'])
+            delsell.append((srec['time'], srec['sid']))
             sportion = srec['portion']
             while sportion > 0:
+                if len(buy_rec) == 0:
+                    logger.warning('no buy record for %s %s', code, srec)
+                    return ()
                 if bportion == 0:
                     if rembuy is not None:
                         consumed += (code, rembuy['time'], 'B', rembuy['portion'], rembuy['price'], rembuy['fee'], rembuy['feeYh'], rembuy['feeGh'], rembuy['sid']),
@@ -758,6 +769,9 @@ class UserStockManager():
                     bportion -= sportion
                     sportion = 0
 
+        for dt, sid in delsell:
+            await delete_records(UserStockSell, UserStockSell.user_id == user.id, UserStockSell.code == code, UserStockSell.time == dt, UserStockSell.sid == sid)
+
         if rembuy is not None:
             if bportion > 0:
                 consumed += (code, rembuy['time'], 'B', rembuy['portion'] - bportion, rembuy['price'], rembuy['fee'], rembuy['feeYh'], rembuy['feeGh'], rembuy['sid']),
@@ -773,17 +787,26 @@ class UserStockManager():
     @classmethod
     async def add_to_archive_deals_table(cls, user, values):
         valdics = []  # 需要插入的记录
+        archive_table = UserArchivedDeals if user.realcash == 1 else UserTrackDeals
         for code, date, typebs, portion, price, fee, feeYh, feeGh, sid in values:
             nval = {
-                'user_id': user.id,
-                'code': code, 'time': date, 'typebs': typebs, 'portion': portion, 'price': price,
-                'fee': fee, 'feeYh': feeYh, 'feeGh': feeGh, 'sid': sid
+                'user_id': user.id,'sid': sid,
+                'code': code, 'time': date, 'typebs': typebs, 'portion': portion, 'price': price
             }
-            existing_record = await query_one_record(UserArchivedDeals, UserArchivedDeals.user_id == user.id, UserArchivedDeals.code == code, UserArchivedDeals.time == date, UserArchivedDeals.typebs == typebs, UserArchivedDeals.sid == sid)
+            if user.realcash == 1:
+                nval['fee'] = fee
+                nval['feeYh'] = feeYh
+                nval['feeGh'] = feeGh
+            else:
+                nval['tkey'] = user.username.split('.')[1]
+            existing_record = await query_one_record(archive_table, archive_table.user_id == user.id, archive_table.code == code, archive_table.time == date, archive_table.typebs == typebs, archive_table.sid == sid)
             if existing_record:
                 nval['portion'] = portion + existing_record.portion
             valdics.append(nval)
-        await upsert_many(UserArchivedDeals, valdics, ['user_id', 'code', 'time', 'typebs', 'sid'])
+        if user.realcash == 1:
+            await upsert_many(archive_table, valdics, ['user_id', 'code', 'time', 'typebs', 'sid'])
+        else:
+            await upsert_many(archive_table, valdics, ['user_id', 'tkey', 'code', 'time', 'typebs', 'sid'])
 
     @classmethod
     async def get_deals(cls, user, code=None):

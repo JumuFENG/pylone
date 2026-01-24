@@ -65,6 +65,7 @@ class SystemSettings:
             except ValueError:
                 raise ValueError(f"数值量的值必须是数字")
         # STRING 类型不需要特殊验证
+        return True
 
     @classmethod
     async def get_all(cls) -> Dict[str, str]:

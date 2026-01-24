@@ -411,8 +411,8 @@ class AllBlocks:
     @classmethod
     async def update_bk_changed(cls):
         bk_chgs = await cls.bkchanges.getLatestChanges()
-        bk_chgs += await cls.clsbkchanges.getLatestChanges()
-        return bk_chgs
+        cls_chgs = await cls.clsbkchanges.getLatestChanges()
+        return bk_chgs + cls_chgs
 
     @classmethod
     async def update_bk_changed_in5days(cls):

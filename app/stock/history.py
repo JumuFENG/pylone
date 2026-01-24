@@ -887,7 +887,7 @@ class StockBkChanges(BkChanges):
                 ztcnt = 0
                 dtcnt = 0
                 for yl in chg['ydl']:
-                    ydarr[self.ydtypes.index(yl['t'])] = yl['ct']
+                    ydarr[self.ydtypes.index(yl['t'])] = yl['ct'] or 0
                     if yl['t'] in self.ydpos_types:
                         ydpos += yl['ct']
                     if yl['t'] == 4:
@@ -898,9 +898,6 @@ class StockBkChanges(BkChanges):
                         ztcnt -= yl['ct']
                     elif yl['t'] == 32:
                         dtcnt -= yl['ct']
-                if ydpos is None or ztcnt is None or dtcnt is None:
-                    logger.warning('invalid ydpos/ztcnt/dtcnt: %s %s', code, yl)
-                    continue
                 ydrow += ydarr
                 ydrow += [ydpos, 2*ydpos-ydct, ztcnt, dtcnt]
                 self.fecthed.append(ydrow)
