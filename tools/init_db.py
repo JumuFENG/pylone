@@ -19,6 +19,14 @@ cfg['password'] = Config.simple_decrypt(cfg['password'])
 
 async def check_database():
     """检查数据库是否存在，不存在则创建"""
+    if Config.database_type() == 'sqlite':
+        await check_sqlite_database()
+    else:  # mysql
+        await check_mysql_database()
+
+
+async def check_mysql_database():
+    """检查MySQL数据库是否存在，不存在则创建"""
     import aiomysql
 
     # 连接到 MySQL 服务器（不指定数据库）
@@ -42,11 +50,28 @@ async def check_database():
                 # 数据库不存在，创建它
                 await cursor.execute(f"CREATE DATABASE `{cfg['dbname']}` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci")
                 await conn.commit()
-                print(f"数据库 '{cfg['dbname']}' 创建成功")
+                print(f"MySQL数据库 '{cfg['dbname']}' 创建成功")
             else:
-                print(f"数据库 '{cfg['dbname']}' 已存在")
+                print(f"MySQL数据库 '{cfg['dbname']}' 已存在")
     finally:
         conn.close()
+
+
+async def check_sqlite_database():
+    """检查SQLite数据库，确保目录存在"""
+    db_dir = Config.h5_history_dir()
+    db_path = f"{db_dir}/{Config.database_config().get('dbname', 'pylone')}.db"
+
+    # 确保目录存在
+    if not os.path.exists(db_dir):
+        os.makedirs(db_dir, exist_ok=True)
+        print(f"创建SQLite数据库目录: {db_dir}")
+
+    # SQLite数据库文件会在首次连接时自动创建
+    if os.path.exists(db_path):
+        print(f"SQLite数据库 '{db_path}' 已存在")
+    else:
+        print(f"SQLite数据库 '{db_path}' 将在首次连接时创建")
 
 async def create_admin():
     """创建管理员用户"""
@@ -96,8 +121,11 @@ async def main():
     for table_name in ['ucostdog_urque']:
         await create_single_table(table_name)
 
-    # async with engine.begin() as conn:
-    #     await conn.run_sync(Base.metadata.create_all)
+    # Create all tables for SQLite
+    if Config.database_type() == 'sqlite':
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+            print("所有表创建完成")
 
     await create_admin()
 

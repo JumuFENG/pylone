@@ -117,6 +117,11 @@ class Config:
     def database_config(cls):
         return cls.all_configs().get('database', {})
 
+    @classmethod
+    def database_type(cls):
+        """Get database type: 'mysql' or 'sqlite'. Defaults to 'mysql'."""
+        return cls.database_config().get('dbtype', 'mysql')
+
 
 logging.basicConfig(
     level=Config.log_level(),

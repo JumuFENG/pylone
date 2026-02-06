@@ -2,12 +2,12 @@ import sys
 import json
 import gzip
 import numpy as np
+import emxg
+import stockrt as srt
 from typing import List, Tuple
 from traceback import format_exc
 from datetime import datetime
-import stockrt as srt
 from stockrt.sources.eastmoney import Em
-from emxg import search_emxg
 from app.hu import classproperty, to_cls_secucode, time_stamp
 from app.hu.network import Network as net
 from app.lofig import logger
@@ -308,6 +308,89 @@ class AllStocks:
         return clist
 
     @classmethod
+    def get_stocks_zdfrank(cls, minzdf=8):
+        if minzdf is None:
+            stocks = srt.stock_list()
+            if stocks is None or 'all' not in stocks:
+                return []
+            return stocks['all']
+
+        try:
+            result = cls.get_emxg_stock_zdfrank(minzdf=minzdf)
+            if not result:
+                clist = Em.qt_clist(
+                    fs='m:0+t:6+f:!2,m:0+t:80+f:!2,m:1+t:2+f:!2,m:1+t:23+f:!2,m:0+t:81+s:262144+f:!2',
+                    fields='f1,f2,f3,f4,f5,f6,f15,f16,f17,f18,f12,f13,f14',
+                    fid='f3', po=1 if minzdf > 0 else 0,
+                    qtcb=lambda data: any(abs(d['f3']) < abs(minzdf) for d in data)
+                )
+                if not clist:
+                    raise Exception('No data from Em.qt_clist')
+                result = [{
+                    'code': srt.get_fullcode(s['f12']),
+                    'name': s['f14'],
+                    'close': float(s['f2']),
+                    'high': float(s['f15']) if s['f15'] != '-' else 0,
+                    'low': float(s['f16']) if s['f16'] != '-' else 0,
+                    'open': float(s['f17']) if s['f17'] != '-' else 0,
+                    'lclose': float(s['f18']),
+                    'change_px': float(s['f4']),
+                    'change': float(s['f3']) / 100,
+                    'volume': (int(s['f5']) if s['f5'] != '-' else 0) * 100,
+                    'amount': float(s['f6']) if s['f6'] != '-' else 0
+                } for s in clist if s['f2'] != '-' and s['f18'] != '-']
+        except Exception as e:
+            logger.warning(f'get_stocks_zdfrank error: {e}')
+
+            clist = cls.get_stocks_zdfrank()
+            minzdf /= 100
+            if minzdf < 0:
+                clist = [s for s in clist if s['change'] <= minzdf]
+                clist = list(reversed(clist))
+            elif minzdf > 0:
+                clist = [s for s in clist if s['change'] >= minzdf]
+
+            result = [{
+                'code': srt.get_fullcode(s['code']),
+                'name': s['name'],
+                'close': float(s['close']),
+                'high': float(s.get('high', 0)),
+                'low': float(s.get('low', 0)),
+                'open': float(s.get('open', 0)),
+                'lclose': float(s.get('lclose', 0)),
+                'change_px': float(s.get('change_px', 0)),
+                'change': float(s.get('change', 0)),
+                'volume': int(s.get('volume', 0)),
+                'amount': float(s.get('amount', 0))
+            } for s in clist]
+        return result
+
+    @staticmethod
+    def get_emxg_stock_zdfrank(minzdf=None):
+        if minzdf is None:
+            return []
+
+        pdata = emxg.search(keyword=f'涨跌幅>={minzdf}%' if minzdf > 0 else f'涨跌幅=<{minzdf}%')
+        pdata = pdata.rename(columns = {
+            '代码': 'code', '名称': 'name', '股票简称': 'name', '最新价': 'close', '涨跌额': 'change_px', '涨跌幅': 'change',
+            '涨跌幅:前复权': 'change', '成交量(股)': 'volume', '成交量': 'volume', '开盘价:前复权': 'open', '开盘价': 'open',
+            '最高价:前复权': 'high', '最高价(日线不复权)': 'high', '最低价:前复权': 'low', '最低价(日线不复权)': 'low', '成交额': 'amount'
+        })
+        pdata = emxg.convert_column(pdata, 'code', srt.get_fullcode)
+        if 'lclose' not in pdata.columns:
+            if 'change_px' not in pdata.columns:
+                pdata['lclose'] = pdata['close'] / (1 + pdata['change'])
+                pdata['change_px'] = pdata['close'] - pdata['lclose']
+            else:
+                pdata['lclose'] = pdata['close'] - pdata['change_px']
+        if 'amount' not in pdata.columns:
+            pdata['amount'] = pdata['close'] * pdata['volume']
+        if 'open' not in pdata.columns:
+            pdata['open'] = pdata['lclose']
+        result = pdata[['code', 'name', 'close', 'high', 'low', 'open', 'change', 'volume', 'amount', 'change_px', 'lclose']].to_dict('records')
+        return result
+
+    @classmethod
     async def load_all_funds(cls):
         def get_stocks(bks, tp):
             stocks = cls.get_bkstocks(bks)
@@ -343,8 +426,9 @@ class AllStocks:
         连续4个季度亏损大于1000万元
         '''
 
-        pdata = search_emxg('连续4个季度亏损大于1000万元')
-        await StockList.save_stocks('purelost4up', [srt.get_fullcode(code[:6]) for code in pdata['代码']])
+        pdata = emxg.search('连续4个季度亏损大于1000万元')
+        pdata = pdata.rename(columns={'代码': 'code'})
+        await StockList.save_stocks('purelost4up', [srt.get_fullcode(code[:6]) for code in pdata['code']])
 
     @classmethod
     async def get_purelost4up(cls):
@@ -534,19 +618,19 @@ class StockMarketStats():
             if self.topbks is None or self.hotstocks is None:
                 await self.get_topbks()
             zdfranks = []
-            fs = 'm:0+t:6+f:!2,m:0+t:80+f:!2,m:1+t:2+f:!2,m:1+t:23+f:!2,m:0+t:81+s:262144+f:!2'
-            zdfranks.extend(Em.qt_clist(fs, fields='f2,f3,f12,f13,f18', fid='f3', po=1, qtcb=lambda data: any(d['f3'] < 8 for d in data)))
-            zdfranks.extend(Em.qt_clist(fs, fields='f2,f3,f12,f13,f18', fid='f3', po=0, qtcb=lambda data: any(d['f3'] > -8 for d in data)))
+            zdfranks.extend(AllStocks.get_stocks_zdfrank(8))
+            zdfranks.extend(AllStocks.get_stocks_zdfrank(-8))
             up_down_stocks = []
             for rkobj in zdfranks:
-                c = rkobj['f2']   # 最新价
-                zd = rkobj['f3']  # 涨跌幅
-                if c == '-' or zd == '-':
-                    continue
-                cd = rkobj['f12'] # 代码
-                if zd >= 8 or zd <= -8:
-                    code = srt.get_fullcode(cd)
+                c = rkobj['close']   # 最新价
+                zd = rkobj['change']  # 涨跌幅
+                code = rkobj['code'] # 代码
+                if zd >= 0.08 or zd <= -0.08:
                     up_down_stocks.append(code)
+
+            if not up_down_stocks:
+                logger.info('no up or down stocks')
+                return
 
             sm_statistics = {'time': datetime.now().strftime('%Y-%m-%d %H:%M'), 'stocks': {'zt_yzb':[], 'zt':[], 'dt':[], 'up':[], 'down':[]}}
             fields = 'open_px,av_px,high_px,low_px,change,change_px,down_price,cmc,business_amount,business_balance,secu_name,secu_code,trade_status,secu_type,preclose_px,up_price,last_px'

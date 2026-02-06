@@ -6,7 +6,9 @@ import requests
 import base64
 from app import PostParams, pparam_doc
 from app.hu import img_to_text
+from app.lofig import Config
 from app.hu.network import Network
+from app.hu.ollama import ollama
 from app.admin.system_settings import SystemSettings
 from .stock.history import Khistory as khis, StockDtInfo
 from .stock.date import TradingDate
@@ -126,10 +128,21 @@ def recognize_image(img):
     if img is None:
         raise HTTPException(status_code=400, detail="No img specified.")
     if img.startswith('http'):
-        return img_to_text(requests.get(img).content)
-    if ',' in img:
+        img = requests.get(img).content
+    elif ',' in img:
         img = img.split(',')[1]
-    return img_to_text(img)
+
+    itext = img_to_text(img)
+
+    if itext is None:
+        ollama_instance = ollama(Config.client_config().get('ollama_api_key', None))
+        if isinstance(img, bytes):
+            img = base64.b64encode(img).decode('utf-8')
+        itext = ollama_instance.img_to_text(img)
+
+    if itext is None:
+        raise HTTPException(status_code=500, detail="Image recognition failed.")
+    return itext
 
 @router.get("/captcha")
 async def get_captcha(

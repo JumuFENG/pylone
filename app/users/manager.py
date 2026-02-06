@@ -277,7 +277,8 @@ class UserStockManager():
                 updated = False
                 for odl in odls:
                     if odl[0].split()[0] == val['time'].split()[0]:
-                        val['sid'] = odl[1]
+                        if val['time'] != odl[0] or val['sid'] != odl[1]:
+                            await delete_records(buy_table, buy_table.user_id == user.id, buy_table.time == odl[0], buy_table.code == code, buy_table.sid == odl[1])
                         await upsert_one(buy_table, val, ['user_id', 'code', 'time', 'sid'])
                         updated = True
                         break
@@ -882,8 +883,12 @@ class UserStockManager():
 
         if 'buydetail' in strdata:
             await cls.replace_orders(UserOrders, user, code, strdata['buydetail'])
+        else:
+            await delete_records(UserOrders, UserOrders.user_id == user.id, UserOrders.code == code)
         if 'buydetail_full' in strdata:
             await cls.replace_orders(UserFullOrders, user, code, strdata['buydetail_full'])
+        else:
+            await delete_records(UserFullOrders, UserFullOrders.user_id == user.id, UserFullOrders.code == code)
         if 'strategies' not in strdata:
             return
 

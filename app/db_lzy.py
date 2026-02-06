@@ -1,26 +1,58 @@
 from typing import AsyncGenerator
-import os
+from functools import cached_property
 from sqlalchemy import select, delete, func, or_
-from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
+from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, AsyncEngine
 from sqlalchemy.orm import sessionmaker, declarative_base
 from app.lofig import Config
+from contextlib import asynccontextmanager
 
-def get_database_url():
-    cfg = {'user': 'root', 'password': '', 'host': 'localhost', 'port': 3306, 'dbname': 'user_management'}
-    cfg.update(Config.database_config())
 
-    if Config.database_type() == 'sqlite':
-        return f"sqlite+aiosqlite:///{Config.h5_history_dir()}/{cfg['dbname']}.db"
-    return f"mysql+aiomysql://{cfg['user']}:{Config.simple_decrypt(cfg['password'])}@{cfg['host']}:{cfg['port']}/{cfg['dbname']}"
-
-engine = create_async_engine(get_database_url(), echo=False, future=True)
-async_session_maker = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 Base = declarative_base()
 
+class LazyDatabase:
+    """懒加载数据库管理器"""
+    @cached_property
+    def database_url(self) -> str:
+        cfg = {'user': 'root', 'password': '', 'host': 'localhost', 'port': 3306, 'dbname': 'user_management'}
+        cfg.update(Config.database_config())
+        return (
+            f"mysql+aiomysql://{cfg['user']}:{Config.simple_decrypt(cfg['password'])}@"
+            f"{cfg['host']}:{cfg['port']}/{cfg['dbname']}"
+        )
+    
+    @cached_property
+    def async_session_maker(self):
+        return sessionmaker(self.engine, class_=AsyncSession, expire_on_commit=False)
 
-async def get_async_session() -> AsyncGenerator[AsyncSession, None]:
-    async with async_session_maker() as session:
-        yield session
+    @cached_property
+    def engine(self) -> AsyncEngine:
+        return create_async_engine(self.database_url, echo=False, future=True)
+
+    @asynccontextmanager
+    async def get_async_session(self) -> AsyncGenerator[AsyncSession, None]:
+        """获取异步session"""
+        async with self.async_session_maker() as session:
+            try:
+                yield session
+                await session.commit()
+            except Exception:
+                await session.rollback()
+                raise
+    
+    async def query_one_value(self, model, field, *clauses):
+        """查询单个值"""
+        async with self.get_async_session() as session:
+            column = getattr(model, field) if isinstance(field, str) else field
+            result = await session.execute(select(column).where(*clauses))
+            return result.scalar()
+        
+    async def close(self):
+        """关闭数据库连接"""
+        if self.engine:
+            await self.engine.dispose()
+
+
+db = LazyDatabase()
 
 async def query_one_value(model, field, *clauses):
     """
@@ -28,7 +60,7 @@ async def query_one_value(model, field, *clauses):
     field: 字段名称，如 'name'
     返回: 字段值
     """
-    async with async_session_maker() as session:
+    async with db.get_async_session() as session:
         column = getattr(model, field) if isinstance(field, str) else field
         result = await session.execute(select(column).where(*clauses))
         return result.scalar()
@@ -38,7 +70,7 @@ async def query_one_record(model, *clauses):
     查询单条记录
     返回: 记录对象
     """
-    async with async_session_maker() as session:
+    async with db.get_async_session() as session:
         result = await session.execute(select(model).where(*clauses))
         return result.scalar_one_or_none()
 
@@ -48,7 +80,7 @@ async def query_values(model, fields=None, *clauses):
     fields: 字段列表，如 [Model.field1, Model.field2]
     返回: 结果列表，每个元素是一个元组
     """
-    async with async_session_maker() as session:
+    async with db.get_async_session() as session:
         if not fields:
             query = select(model.__table__.columns)
         elif isinstance(fields, (list, tuple)):
@@ -71,7 +103,7 @@ async def query_aggregate(func_type, model, field, *clauses):
     查询聚合值
     func_type: 'max', 'min', 'count', 'sum', 'avg' 等
     """
-    async with async_session_maker() as session:
+    async with db.get_async_session() as session:
         func_map = {
             "max": func.max,
             "min": func.min,
@@ -95,7 +127,7 @@ async def query_group_counts(model, field, *clauses):
     field: 分组字段名称，如 'category'
     返回: 字典，键为字段值，值为计数
     """
-    async with async_session_maker() as session:
+    async with db.get_async_session() as session:
         column = getattr(model, field) if isinstance(field, str) else field
         query = select(column, func.count()).group_by(column)
         if clauses:
@@ -103,17 +135,6 @@ async def query_group_counts(model, field, *clauses):
         result = await session.execute(query)
         return {row[0]: row[1] for row in result.all()}
 
-def array_to_dict_list(model, arrlist):
-    """
-    将查询结果转换为字典列表
-    model: model
-    arrlist: 查询结果列表，每个元素是一个元组
-    返回: 字典列表
-    """
-    if not arrlist:
-        return []
-    keys = [col.name for col in model.__table__.columns]
-    return [dict(zip(keys, x)) for x in arrlist]
 
 async def upsert_one(model, data, unique_fields):
     """
@@ -121,7 +142,7 @@ async def upsert_one(model, data, unique_fields):
     data: 字典，包含字段和值
     unique_fields: 唯一字段列表，用于判断记录是否存在
     """
-    async with async_session_maker() as session:
+    async with db.get_async_session() as session:
         filters = [getattr(model, field) == data[field] for field in unique_fields]
         existing = await session.execute(select(model).where(*filters))
         instance = existing.scalar_one_or_none()
@@ -150,7 +171,7 @@ async def insert_many(model, data_list, unique_fields=[]):
     if not data_list:
         return
 
-    async with async_session_maker() as session:
+    async with db.get_async_session() as session:
         if not unique_fields:
             to_add = [model(**data) for data in data_list]
             session.add_all(to_add)
@@ -176,7 +197,7 @@ async def upsert_many_bulk(model, data_list, unique_fields):
     data_list: 字典列表，包含字段和值
     unique_fields: 唯一字段列表，用于判断记录是否存在
     """
-    async with async_session_maker() as session:
+    async with db.get_async_session() as session:
         to_add = []
         update_count = 0
         for data in data_list:
@@ -225,7 +246,7 @@ async def delete_records(model, *clauses):
     """
     删除符合条件的记录
     """
-    async with async_session_maker() as session:
+    async with db.get_async_session() as session:
         try:
             result = await session.execute(
                 delete(model).where(*clauses)
@@ -235,3 +256,11 @@ async def delete_records(model, *clauses):
         except Exception as e:
             await session.rollback()
             raise e
+
+# 也可以保留原有变量名（通过属性懒加载）
+async def get_engine():
+    return await db.engine
+
+async def get_async_session_maker():
+    return await db.async_session_maker
+

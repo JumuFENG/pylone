@@ -135,3 +135,24 @@ class StockBaseSelector():
             amplitude=safe_get(kl, 'amplitude', 0),
             turnover=safe_get(kl, 'turnover', 0)
         ) for kl in kd]
+
+    def check_lbc(self, allkl, zdf=10):
+        lbc, fid, lid = 0, 0, 0
+        mxlbc, mxfid, mxlid = 0, 0, 0
+        for i in range(0, len(allkl)):
+            if round(allkl[i].change, 2) >= zdf/100 and allkl[i].high == allkl[i].close:
+                if lbc == 0:
+                    fid = i
+                lbc += 1
+                lid = i
+            if i - lid >= 3:
+                if lbc > mxlbc:
+                    mxlbc = lbc
+                    mxfid = fid
+                    mxlid = lid
+                lbc = 0
+        if lbc > mxlbc:
+            mxlbc = lbc
+            mxfid = fid
+            mxlid = lid
+        return mxlbc, allkl[mxfid].time, allkl[mxlid].time

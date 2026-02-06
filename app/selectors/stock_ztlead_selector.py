@@ -111,6 +111,8 @@ class StockZtDaily(StockBaseSelector):
             osel[4] = sel[4]
         if osel[5] != sel[5]:
             osel[5] = sel[5]
+        if osel[4] == 1 and osel[5] > 1:
+            logger.error(f'error lbc and days: {osel}')
 
     async def task_processing(self, item):
         c, zdate, sdate = item
@@ -134,30 +136,19 @@ class StockZtDaily(StockBaseSelector):
                 continue
 
             c0 = allkl[i-1].close
-            if allkl[i].close == allkl[i].high and allkl[i].close >= zt_priceby(c0, zdf=zdf):
-                days = 1
-                lbc = 1
-                t = i
-                j = i - 1
-                while j >= 0:
-                    if j == 0:
-                        if allkl[j].change * 100 >= zdf - 0.1:
-                            lbc += 1
-                            days += t
-                        break
-                    c0 = allkl[j-1].close
-                    if allkl[j].close == allkl[j].high and allkl[j].close >= zt_priceby(c0, zdf=zdf):
-                        lbc += 1
-                        days += t - j
-                        t = j
-                        j -= 1
+            zt_prc = zt_priceby(c0, zdf=zdf)
+            if allkl[i].close == allkl[i].high and (allkl[i].close >= zt_prc or c0 + allkl[i].change_px >= zt_prc):
+                while True:
+                    lbc, fdate, ldate = self.check_lbc(allkl, zdf=zdf)
+                    if TradingDate.calc_trading_days(ldate, zdate) > 4:
+                        allkl = [d for d in allkl if d.time > ldate]
                         continue
-                    if t - j >= 3:
-                        break
-                    j -= 1
-                if lbc == 1:
+                    break
+                days = len([d for d in allkl if d.time >= fdate and d.time <= ldate])
+                if lbc == 1 and days != 1:
+                    logger.warning(f'consider wrong lbc: {lbc}, {days}, {item}')
                     days = 1
-                await self.merge_selected([c, allkl[i].time, 0, 0, lbc, days, 0, "", "", mkt])
+                await self.merge_selected([c, ldate, 0, 0, lbc, days, 0, "", "", mkt])
             i += 1
 
     async def get_hot_stocks(self, date):
@@ -175,7 +166,7 @@ class StockZtDaily(StockBaseSelector):
         if date is None:
             date = await query_aggregate('max', self.db, 'time')
 
-        return await query_values(self.db, ['code', 'bk', 'cpt'], self.db.time == date, self.db.lbc == 1, self.db.mkt == 0)
+        return await query_values(self.db, ['code', 'bk', 'cpt'], self.db.time == date, self.db.lbc == 1, self.db.days == 1, self.db.mkt == 0)
 
     async def dump_by_concept(self, date, concept):
         if date is None:

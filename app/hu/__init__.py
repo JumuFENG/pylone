@@ -1,4 +1,3 @@
-import ddddocr
 import os
 import time
 import base64
@@ -17,15 +16,21 @@ class classproperty:
             self._cache[owner] = self._func(owner)
         return self._cache[owner]
 
-@lru_cache(maxsize=1)
-def ocr() -> ddddocr.DdddOcr:
-    return ddddocr.DdddOcr(show_ad=False)
+import importlib.util
+if importlib.util.find_spec("ddddocr") is None:
+    def img_to_text(img):
+        return None
+else:
+    import ddddocr
+    @lru_cache(maxsize=1)
+    def ocr() -> ddddocr.DdddOcr:
+        return ddddocr.DdddOcr(show_ad=False)
 
-def img_to_text(img):
-    if isinstance(img, str) and os.path.isfile(img):
-        with open(img, 'rb') as f:
-            img = f.read()
-    return ocr().classification(img)
+    def img_to_text(img):
+        if isinstance(img, str) and os.path.isfile(img):
+            with open(img, 'rb') as f:
+                img = f.read()
+        return ocr().classification(img)
 
 def time_stamp():
     return int(time.time()*1000)

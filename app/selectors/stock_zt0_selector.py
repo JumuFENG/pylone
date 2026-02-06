@@ -76,27 +76,6 @@ class StockHotStocksRetryZt0Selector(StockBaseSelector):
                     self.wkstocks.append((c,zd,days,step, 66))
         self.wkstocks = sorted(self.wkstocks, key=lambda x: (x[0], x[1]))
 
-    def check_lbc(self, allkl):
-        lbc, fid, lid = 0, 0, 0
-        mxlbc, mxfid, mxlid = 0, 0, 0
-        for i in range(0, len(allkl)):
-            if round(allkl[i].change, 2) >= 0.1 and allkl[i].high == allkl[i].close:
-                if lbc == 0:
-                    fid = i
-                lbc += 1
-                lid = i
-            if i - lid >= 3:
-                if lbc > mxlbc:
-                    mxlbc = lbc
-                    mxfid = fid
-                    mxlid = lid
-                lbc = 0
-        if lbc > mxlbc:
-            mxlbc = lbc
-            mxfid = fid
-            mxlid = lid
-        return mxlbc, allkl[mxfid].time, allkl[mxlid].time
-
     async def task_processing(self, item):
         c,d,days,step,rdays = item
         allkl = await self.get_kd_data(c, TradingDate.prev_trading_date(d, days), fqt=1)
