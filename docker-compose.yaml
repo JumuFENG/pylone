@@ -10,8 +10,10 @@ services:
       - /Users/chuazhou/dev/pylone/data:/home/pyuser/pylone/data
       - /Users/chuazhou/dev/pylone/app:/home/pyuser/pylone/app
       - /Users/chuazhou/dev/pylone/html:/home/pyuser/pylone/html
+      - /Users/chuazhou/dev/pylone/static:/home/pyuser/pylone/static
+      - /Users/chuazhou/dev/pylone/tools:/home/pyuser/pylone/tools
       - /Users/chuazhou/dev/pylone/main.py:/home/pyuser/pylone/main.py
     ports:
-      - "9111:9111"
+      - "5188:5188"
     restart: unless-stopped
 

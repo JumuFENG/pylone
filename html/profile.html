@@ -68,9 +68,9 @@
                     <form id="createUserForm" onsubmit="event.preventDefault(); createSubAccount();">
                         <div style="display: flex; align-items: center; justify-content: space-between;">
                             <label for="newUserUsername">用户名 *</label>
-                            <input type="text" id="newUserUsername" name="username" required="" style="width: 150px;height: 30px;">
+                            <input type="text" id="newUserUsername" name="username" required="" autocomplete="off" style="width: 150px;height: 30px;">
                             <label for="newUserNickname">显示名</label>
-                            <input type="text" id="newUserNickname" name="nickname" style="width: 150px;height: 30px;">
+                            <input type="text" id="newUserNickname" name="nickname" autocomplete="off" style="width: 150px;height: 30px;">
                             <label style="margin: 0;">
                                 资金类型
                                 <select name="realcash" id="newUserRealcash" style="width: 150px;height: 30px;">
@@ -79,9 +79,9 @@
                                 </select>
                             </label>
                             <label for="newUserEmail">邮箱</label>
-                            <input type="email" id="newUserEmail" name="email" style="width: 150px;height: 30px;" placeholder="选填,默认用户名@父账户.com">
+                            <input type="email" id="newUserEmail" name="email" style="width: 150px;height: 30px;" autocomplete="off" placeholder="选填,默认用户名@父账户.com">
                             <label for="newUserPassword">密码</label>
-                            <input type="password" id="newUserPassword" name="password" minlength="6" style="width: 150px;height: 30px;" placeholder="选填,默认123456">
+                            <input type="password" id="newUserPassword" name="password" minlength="6" autocomplete="off" style="width: 150px;height: 30px;" placeholder="选填,默认123456">
                             <button type="submit" class="action-btn action-btn-edit">创建子账户</button>
                         </div>
                     </form>

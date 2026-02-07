@@ -431,7 +431,14 @@ class StockListPanelPage extends RadioAnchorPage {
             common.removeAllChild(this.container);
             const account = ustocks.account(this.acc);
             if (account.realcash) {
-                stocks = Object.values(stocks).sort((a, b) => b.holdCount * b.latestPrice - a.holdCount * a.latestPrice);
+                stocks = Object.values(stocks).sort((a, b) => {
+                    let va = a.holdCount * a.latestPrice;
+                    let vb = b.holdCount * b.latestPrice;
+                    if (va - vb == 0) {
+                        return a.code.substring(2) - b.code.substring(2);
+                    }
+                    return vb - va;
+                });
             } else {
                 const fs = Object.values(stocks).filter(s => !s.strategies?.buydetail);
                 stocks = Object.values(stocks).filter(s => s.strategies?.buydetail).sort((a, b) => {

@@ -577,7 +577,7 @@ class StrategyGroupView {
         }
         this.strGrp.transfers = transfers;
         delete(this.strGrp.infixing);
-        console.log('send save strategy POST', JSON.stringify(this.strGrp));
+        console.log('send save strategy POST', this.code, JSON.stringify(this.strGrp));
 
         accld.saveStrategy(this.account, this.code, this.strGrp);
     }
