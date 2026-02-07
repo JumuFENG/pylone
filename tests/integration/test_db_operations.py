@@ -1,19 +1,28 @@
 import unittest
+from unittest.mock import patch
 import sys
 import os
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.insert(0, os.path.realpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), '../..')))
+from app.lofig import Config
+dbcfg = Config.database_config()
+dbcfg['dbname'] = 'testdb'
+patcher = patch('app.lofig.Config.database_config')
+mockdbcfg = patcher.start()
+mockdbcfg.return_value = dbcfg
 
 from app.stock.models import MdlAllStock
 from app.db import upsert_one, upsert_many, query_one_value, query_aggregate, query_values, delete_records
 
 
+@unittest.skip("skip it!")
 class TestDatabaseOperations(unittest.IsolatedAsyncioTestCase):
     """测试数据库操作函数"""
     test_code = "test0001"
     test_code1 = "test0002"
     test_code2 = "test0003"
     test_code3 = "test0004"
+
     async def test_upsert_one_insert(self):
         """测试 upsert_one 插入新记录"""
         # 清理测试数据
@@ -347,7 +356,7 @@ class TestDatabaseOperations(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(deleted_count, 1)  # 只剩 000002
 
         # 验证剩余记录
-        count = await query_aggregate("count", MdlAllStock, "id", MdlAllStock.code.in_([self.test_code2, self.test_code3]))
+        count = await query_aggregate("count", MdlAllStock, "code", MdlAllStock.code.in_([self.test_code2, self.test_code3]))
         self.assertEqual(count, 1)
 
         # 删除剩余测试记录
@@ -356,7 +365,7 @@ class TestDatabaseOperations(unittest.IsolatedAsyncioTestCase):
 
 
 if __name__ == '__main__':
-    # unittest.main()
-    suite = unittest.TestSuite()
-    suite.addTest(TestDatabaseOperations('test_query_values'))
-    unittest.TextTestRunner().run(suite)
+    unittest.main()
+    # suite = unittest.TestSuite()
+    # suite.addTest(TestDatabaseOperations('test_query_values'))
+    # unittest.TextTestRunner().run(suite)

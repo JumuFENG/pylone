@@ -1,0 +1,5 @@
+h5py
+numpy
+pandas
+pytdx
+ddddocr==1.5.6

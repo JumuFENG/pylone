@@ -1,15 +1,18 @@
 #!/usr/bin/env python3
+"""
+Unit tests for trading date calculations.
+"""
+import os, sys
+sys.path.insert(0, os.path.realpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..')))
+
 import unittest
-import sys
-import os
-
-# 添加项目路径
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
+from base import BaseTestCase
 from app.stock.date import TradingDate
 
 
-class TestTradingDate(unittest.TestCase):
+class TestTradingDateWithRealModule(BaseTestCase):
+    """Test trading date with real module."""
+
     def setUp(self):
         TradingDate.holidays = ['2025-01-01','2025-01-28','2025-01-29','2025-01-30','2025-01-31','2025-02-03','2025-02-04','2025-04-04','2025-05-01','2025-05-02','2025-05-05']
 

@@ -1,143 +1,138 @@
 """
 测试 Basic Auth 认证
 """
-import requests
 import base64
-import sys
 import os
+import sys
+import unittest
+from typing import Optional
+
+import requests
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from app.lofig import Config
+
 BASE_URL = f"http://localhost:{Config.client_config()['port']}"
-# 添加项目路径
 
-def test_basic_auth():
-    """测试 Basic Auth 认证"""
-    
-    # 测试用例 1: 使用邮箱登录
-    print("测试 1: 使用邮箱 + Basic Auth")
-    response = requests.get(
-        f"{BASE_URL}/users/me",
-        auth=("admin@admin.com", "admin123")
-    )
-    print(f"状态码: {response.status_code}")
-    if response.status_code == 200:
-        print(f"用户信息: {response.json()}")
-    else:
-        print(f"错误: {response.text}")
-    print()
-    
-    # 测试用例 2: 使用用户名登录
-    print("测试 2: 使用用户名 + Basic Auth")
-    response = requests.get(
-        f"{BASE_URL}/users/me",
-        auth=("admin", "admin123")
-    )
-    print(f"状态码: {response.status_code}")
-    if response.status_code == 200:
-        print(f"用户信息: {response.json()}")
-    else:
-        print(f"错误: {response.text}")
-    print()
-    
-    # 测试用例 3: 手动构造 Basic Auth header
-    print("测试 3: 手动构造 Basic Auth header")
-    credentials = base64.b64encode(b"admin@admin.com:admin123").decode('utf-8')
-    response = requests.get(
-        f"{BASE_URL}/users/me",
-        headers={"Authorization": f"Basic {credentials}"}
-    )
-    print(f"状态码: {response.status_code}")
-    if response.status_code == 200:
-        print(f"用户信息: {response.json()}")
-    else:
-        print(f"错误: {response.text}")
-    print()
-    
-    # 测试用例 4: 错误的密码
-    print("测试 4: 错误的密码")
-    response = requests.get(
-        f"{BASE_URL}/users/me",
-        auth=("admin@admin.com", "wrongpassword")
-    )
-    print(f"状态码: {response.status_code}")
-    print(f"响应: {response.text}")
-    print()
-    
-    # 测试用例 5: 对比 Bearer Token 认证
-    print("测试 5: Bearer Token 认证（对比）")
-    login_response = requests.post(
-        f"{BASE_URL}/auth/bearer/login",
-        data={"username": "admin@admin.com", "password": "admin123"}
-    )
-    if login_response.status_code == 200:
-        token = login_response.json()["access_token"]
-        response = requests.get(
-            f"{BASE_URL}/users/me",
-            headers={"Authorization": f"Bearer {token}"}
+
+def _check_server_availability() -> bool:
+    """检查服务器是否运行"""
+    try:
+        response = requests.get(f"{BASE_URL}/", timeout=5)
+        return response.status_code in (200, 404)  # 404 也表示服务器在运行
+    except (requests.exceptions.ConnectionError, requests.exceptions.Timeout):
+        return False
+
+
+class TestBasicAuth(unittest.TestCase):
+    """测试 Basic Auth 认证的集成测试类"""
+
+    @classmethod
+    def setUpClass(cls):
+        """检查服务器是否可用"""
+        cls.server_available = _check_server_availability()
+
+    def _get_user_info(self, auth: Optional[tuple] = None, headers: Optional[dict] = None) -> requests.Response:
+        """获取用户信息的辅助方法"""
+        kwargs = {}
+        if auth:
+            kwargs['auth'] = auth
+        if headers:
+            kwargs['headers'] = headers
+        return requests.get(f"{BASE_URL}/users/me", **kwargs)
+
+    @unittest.skipIf(not _check_server_availability(), "Server not running")
+    def test_basic_auth_email(self):
+        """测试使用邮箱 + Basic Auth 认证"""
+        response = self._get_user_info(auth=("admin@admin.com", "admin123"))
+        
+        self.assertEqual(response.status_code, 200)
+        user_data = response.json()
+        self.assertIn('email', user_data)
+        self.assertEqual(user_data['email'], 'admin@admin.com')
+
+    @unittest.skipIf(not _check_server_availability(), "Server not running")
+    def test_basic_auth_username(self):
+        """测试使用用户名 + Basic Auth 认证"""
+        response = self._get_user_info(auth=("admin", "admin123"))
+        
+        self.assertEqual(response.status_code, 200)
+        user_data = response.json()
+        self.assertIn('email', user_data)
+        self.assertEqual(user_data['email'], 'admin@admin.com')
+
+    @unittest.skipIf(not _check_server_availability(), "Server not running")
+    def test_basic_auth_manual_header(self):
+        """测试手动构造 Basic Auth header"""
+        credentials = base64.b64encode(b"admin@admin.com:admin123").decode('utf-8')
+        headers = {"Authorization": f"Basic {credentials}"}
+        response = self._get_user_info(headers=headers)
+        
+        self.assertEqual(response.status_code, 200)
+        user_data = response.json()
+        self.assertIn('email', user_data)
+        self.assertEqual(user_data['email'], 'admin@admin.com')
+
+    @unittest.skipIf(not _check_server_availability(), "Server not running")
+    def test_basic_auth_wrong_password(self):
+        """测试错误的密码"""
+        response = self._get_user_info(auth=("admin@admin.com", "wrongpassword"))
+        
+        self.assertEqual(response.status_code, 401)
+        self.assertIn('detail', response.json())
+
+    @unittest.skipIf(not _check_server_availability(), "Server not running")
+    def test_bearer_token_auth(self):
+        """测试 Bearer Token 认证"""
+        # 登录获取 token
+        login_response = requests.post(
+            f"{BASE_URL}/auth/bearer/login",
+            data={"username": "admin@admin.com", "password": "admin123"}
         )
-        print(f"状态码: {response.status_code}")
-        if response.status_code == 200:
-            print(f"用户信息: {response.json()}")
-    else:
-        print(f"Bearer Token 登录失败: {login_response.status_code}")
-        print(f"响应: {login_response.text}")
-    print()
-    
-    # 测试用例 6: Cookie 认证
-    print("测试 6: Cookie 认证")
-    # 创建一个 session 来自动管理 cookies
-    session = requests.Session()
-    
-    # 6.1 登录获取 cookie
-    print("  6.1 登录获取 cookie...")
-    login_response = session.post(
-        f"{BASE_URL}/auth/jwt/login",
-        data={"username": "admin@admin.com", "password": "admin123"}
-    )
-    print(f"  登录状态码: {login_response.status_code}")
-    
-    if login_response.status_code == 204 or login_response.status_code == 200:
-        # 检查是否设置了 cookie
-        if 'fastapiusersauth' in session.cookies:
-            print(f"  Cookie 已设置: fastapiusersauth")
-            
-            # 6.2 使用 cookie 访问受保护的端点
-            print("  6.2 使用 cookie 访问 /users/me...")
-            response = session.get(f"{BASE_URL}/users/me")
-            print(f"  状态码: {response.status_code}")
-            if response.status_code == 200:
-                print(f"  用户信息: {response.json()}")
-            else:
-                print(f"  错误: {response.text}")
+        
+        self.assertEqual(login_response.status_code, 200)
+        token_data = login_response.json()
+        self.assertIn('access_token', token_data)
+        
+        # 使用 token 访问受保护的端点
+        token = token_data["access_token"]
+        headers = {"Authorization": f"Bearer {token}"}
+        response = self._get_user_info(headers=headers)
+        
+        self.assertEqual(response.status_code, 200)
+        user_data = response.json()
+        self.assertIn('email', user_data)
+        self.assertEqual(user_data['email'], 'admin@admin.com')
 
-            # 6.3 请求 /users/me?auto_refresh=1 来触发服务器端自动刷新（如需要）
-            print("  6.3 请求 /users/me?auto_refresh=1 (尝试自动刷新)...")
-            resp2 = session.get(f"{BASE_URL}/users/me?auto_refresh=1")
-            print(f"  状态码: {resp2.status_code}")
-            if resp2.status_code == 200:
-                try:
-                    print(f"  用户信息: {resp2.json()}")
-                except Exception:
-                    print("  无法解析用户信息")
-                print(f"  Cookie fastapiusersauth present: {'fastapiusersauth' in session.cookies}")
-            else:
-                print(f"  请求失败: {resp2.text}")
-        else:
-            print(f"  警告: Cookie 未设置")
-            print(f"  可用的 cookies: {session.cookies.get_dict()}")
-    else:
-        print(f"  Cookie 登录失败: {login_response.status_code}")
-        print(f"  响应: {login_response.text}")
-    print()
+    @unittest.skipIf(not _check_server_availability(), "Server not running")
+    def test_cookie_auth(self):
+        """测试 Cookie 认证"""
+        session = requests.Session()
+        
+        # 登录获取 cookie
+        login_response = session.post(
+            f"{BASE_URL}/auth/jwt/login",
+            data={"username": "admin@admin.com", "password": "admin123"}
+        )
+        
+        self.assertIn(login_response.status_code, (200, 204))
+        self.assertIn('fastapiusersauth', session.cookies)
+        
+        # 使用 cookie 访问受保护的端点
+        response = session.get(f"{BASE_URL}/users/me")
+        self.assertEqual(response.status_code, 200)
+        user_data = response.json()
+        self.assertIn('email', user_data)
+        self.assertEqual(user_data['email'], 'admin@admin.com')
+        
+        # 测试自动刷新功能
+        refresh_response = session.get(f"{BASE_URL}/users/me?auto_refresh=1")
+        self.assertEqual(refresh_response.status_code, 200)
+        refresh_data = refresh_response.json()
+        self.assertIn('email', refresh_data)
+        self.assertEqual(refresh_data['email'], 'admin@admin.com')
+
 
 if __name__ == "__main__":
-    print("=" * 60)
-    print("Basic Auth 认证测试")
-    print("=" * 60)
-    print()
-    test_basic_auth()
-    print("=" * 60)
-    print("测试完成")
-    print("=" * 60)
+    unittest.main()

@@ -26,7 +26,7 @@ class TestH5file(unittest.TestCase):
 
     def test_read_transaction(self):
         trans2 = sts.read_saved_data('sz000001', length=5000)
-        t_count2 = {}, {}
+        t_count2 = {}
         for t in trans2.tolist():
             k = t[0].split(' ')[1]
             t_count2[k] = t_count2.get(k, 0) + 1

@@ -18,9 +18,14 @@ class TestSelector(unittest.IsolatedAsyncioTestCase):
         x = await sz.getHeadedStocks(bkstocks, '2025-12-24')
         self.assertIsInstance(x, list)
 
+    async def test_dailyzt_selector(self):
+        sz = StockZtDaily()
+        await sz.start_multi_task('2026-02-06')
+        self.assertIsInstance(sz.wkstocks, list)
+
 
 if __name__ == '__main__':
     # unittest.main()
     suite = unittest.TestSuite()
-    suite.addTest(TestSelector('test_ztlead_selector'))
+    suite.addTest(TestSelector('test_dailyzt_selector'))
     unittest.TextTestRunner().run(suite)
