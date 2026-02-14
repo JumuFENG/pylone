@@ -1,8 +1,5 @@
 'use strict';
 
-const accountsMap = {'normal': ['normal'], 'collat': ['credit', 'collat']};
-const accountNames = {'normal':'普通账户', 'collat': '担保品账户', 'credit': '融资账户'};
-
 const strategyViewManager = {
     viewer(strategy) {
         if (strategy.key == 'StrategyBuy') {
@@ -469,17 +466,18 @@ class StrategyBaseView {
 
     createBuyAccountSelector() {
         var acctDiv = document.createElement('div');
-        if (accountsMap[this.ownerAccount]?.length > 1) {
+        let baccs = ustocks.possible_buy_accounts(this.ownerAccount);
+        if (baccs?.length > 1) {
             acctDiv.appendChild(document.createTextNode('买入账户 '));
             this.accountSelector = document.createElement('select');
-            accountsMap[this.ownerAccount].forEach(acc => {
-                var opt = new Option(accountNames[acc], acc);
+            baccs.forEach(acc => {
+                var opt = new Option(ustocks.account_name(acc), acc);
                 this.accountSelector.options.add(opt);
             });
             acctDiv.appendChild(this.accountSelector);
             if (this.strategy.account !== undefined) {
                 this.accountSelector.value = this.strategy.account;
-            } else if (accountsMap[this.ownerAccount].includes('credit')) {
+            } else if (baccs.includes('credit')) {
                 this.accountSelector.value = 'credit';
             } else {
                 this.accountSelector.value = this.ownerAccount;

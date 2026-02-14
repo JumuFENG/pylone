@@ -60,6 +60,16 @@ const ses = {
 }
 
 const ustocks = {
+    accountsMap: {'normal': ['normal'], 'collat': ['credit', 'collat']},
+    accountNames: {'normal':'普通账户', 'collat': '担保品账户', 'credit': '融资账户'},
+    possible_buy_accounts(acc) {
+        let accstr = this.accounts[acc]?.name ?? acc;
+        return this.accountsMap[accstr] ?? [accstr];
+    },
+    account_name(acc) {
+        let accstr = this.accounts[acc]?.name ?? acc;
+        return this.accounts[acc]?.nickname ?? this.accountNames[accstr] ?? accstr;
+    },
     cache_account(acc) {
         if (!this.accounts) {
             this.accounts = {};
