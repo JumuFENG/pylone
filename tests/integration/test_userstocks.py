@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 import unittest
 from unittest.mock import Mock, ANY, patch, AsyncMock
-import numpy as np
 import json
 import sys
 import os

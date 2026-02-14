@@ -1,5 +1,4 @@
 import asyncio
-import numpy as np
 from typing import Optional
 from datetime import datetime
 from traceback import format_exc
@@ -115,12 +114,7 @@ class StockBaseSelector():
         if kd is None or len(kd) == 0:
             return None
         def safe_get(record, field_name, default=0.0):
-            if field_name in record.dtype.names:
-                value = record[field_name]
-                if value is None or (isinstance(value, float) and np.isnan(value)):
-                    return default
-                return float(value)
-            return default
+            return record.get(field_name, default)
 
         return [KNode(
             time=kl['time'],

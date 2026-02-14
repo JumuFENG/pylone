@@ -6,7 +6,6 @@ from app.hu import lru_cache, classproperty
 from app.hu.network import Network
 from app.lofig import Config
 from app.db import query_values, insert_many, array_to_dict_list
-from .h5 import KLineStorage as kls
 from .models import MdlHolidays
 
 
@@ -21,6 +20,10 @@ class TradingDate():
             with open(cls.holidayfile, 'r') as f:
                 return json.load(f)
         return []
+
+    @classproperty
+    def tradedayfile(cls):
+        return os.path.join(Config.h5_history_dir(), 'tradedays.json')
 
     @staticmethod
     def today(sep='-'):
@@ -37,12 +40,25 @@ class TradingDate():
     @classmethod
     @lru_cache(maxsize=1)
     def max_traded_date(cls):
-        return kls.max_date('sh000001')
+        if os.path.isfile(cls.tradedayfile):
+            with open(cls.tradedayfile, 'r') as f:
+                return json.load(f)['max_traded_date']
 
     @classmethod
-    @lru_cache(maxsize=1)
+    def update_max_traded_date(cls, date):
+        data = {'max_traded_date': date}
+        if os.path.isfile(cls.tradedayfile):
+            with open(cls.tradedayfile, 'r') as f:
+                last_data = json.load(f)
+            last_data.update(data)
+            data = last_data
+        with open(cls.tradedayfile, 'w') as f:
+            json.dump(data, f)
+        cls.max_traded_date.cache_clear()
+
+    @classmethod
     def min_traded_date(cls):
-        return kls.min_date('sh000001')
+        return '1990-12-19'
 
     @classmethod
     def is_trading_date(cls, date):
@@ -184,7 +200,6 @@ class TradingDate():
         """强制刷新缓存"""
         cls.max_traded_date.cache_clear()
         cls.max_trading_date.cache_clear()
-        cls.min_traded_date.cache_clear()
 
     @classmethod
     async def update_holiday(cls):

@@ -214,3 +214,5 @@ config/
 data/
 logs/
 packages/
+.opencode/
+AGENTS.md

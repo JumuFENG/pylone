@@ -24,7 +24,7 @@ async def save_earning_task():
         return
 
     dnow = datetime.now()
-    if dnow.weekday() == 4:
+    if dnow.weekday() == 4 or dnow.isocalendar()[1] != datetime.strptime(TradingDate.next_trading_date(TradingDate.today()), '%Y-%m-%d').isocalendar()[1]:
         users = await admin_user_list()
         for u in users:
             if u.realcash == 0:

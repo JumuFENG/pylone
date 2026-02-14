@@ -12,11 +12,12 @@ RUN chown -R pyuser:pyuser /usr/local/lib/python3.12/site-packages && \
 USER pyuser
 
 # 安装Python依赖
-COPY --chown=pyuser:pyuser requirements.txt main.py ./
+COPY --chown=pyuser:pyuser requirements.txt requirements-extra.txt main.py ./
 COPY --chown=pyuser:pyuser ./packages ./packages/
 RUN pip install --upgrade pip && \
     pip install --user -r requirements.txt && \
     pip install ./packages/*.whl && \
+    pip install --user -r requirements-extra.txt && \
     rm -rf ./packages/
 
 # 复制应用代码

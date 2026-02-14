@@ -1,14 +1,11 @@
 import sys
 import re
 import json
-import asyncio
 import hashlib
-import numpy as np
 from datetime import datetime
 from bs4 import BeautifulSoup
 from traceback import format_exc
 from typing import Optional, List, Any
-from numpy.lib.recfunctions import append_fields
 import stockrt as srt
 from app.lofig import logger
 from app.hu import classproperty, time_stamp
@@ -18,8 +15,8 @@ from app.db import (
     array_to_dict_list, query_one_value, query_values, query_aggregate,
     upsert_one, upsert_many, insert_many, delete_records)
 from . import dynamic_cache, lru_cache
-from .h5 import (KLineStorage as kls, FflowStorage as ffs)
 from .date import TradingDate
+from .storage.sqlite import kls, fls
 from .models import (
     MdlAllStock, MdlStockList, MdlStockShare,MdlStockBk, MdlStockBkMap, MdlStockChanges, MdlStockBkChanges, MdlStockBkClsChanges,
     MdlDayZtStocks, MdlDayDtStocks, MdlDayZtConcepts)
@@ -64,15 +61,16 @@ class Khistory:
         return 0
 
     @classmethod
-    def max_date(cls, code, kltype='d'):
-        return kls.max_date(srt.get_fullcode(code), srt.to_int_kltype(kltype))
+    async def max_date(cls, code, kltype='d'):
+        return await kls.get_latest_time(srt.get_fullcode(code), srt.to_int_kltype(kltype))
 
     @classmethod
-    def count_bars_to_updated(cls, code, kltype=101):
+    async def count_bars_to_updated(cls, code, kltype=101):
         kltype = srt.to_int_kltype(kltype)
         if kltype not in kls.saved_kline_types:
             return 0
-        guessed = cls.guess_bars_since(cls.max_date(code, kltype), kltype)
+        mxdate = await cls.max_date(code, kltype)
+        guessed = cls.guess_bars_since(mxdate, kltype)
         if guessed == sys.maxsize:
             return guessed
         if not TradingDate.trading_ended():
@@ -89,11 +87,11 @@ class Khistory:
                 length = 0
             else:
                 length += 1
-        def_len = kls.default_kline_cache_size(klt)
+        def_len = 0
         if length is None:
             length = def_len
         code = srt.get_fullcode(code)
-        kldata = kls.read_kline_data(code, klt, max(length, def_len))
+        kldata = await kls.read_kline_data(code, klt, max(length, def_len))
         if kldata is None:
             return None
 
@@ -101,7 +99,7 @@ class Khistory:
             kldata = kldata[-length:]
 
         if start is not None:
-            kldata = kldata[kldata['time'] >= start]
+            kldata = [kl for kl in kldata if kl['time'] >= start]
 
         if fqt == 0 or len(kldata) == 0:
             return kldata
@@ -114,14 +112,14 @@ class Khistory:
         前复权
 
         Args:
-            f0data: numpy 结构化数组或元组列表
+            f0data: dict数组或元组列表
             bndata: 分红数据列表
 
         Returns:
             与输入相同类型的复权后数据
         """
         # 判断输入类型
-        is_numpy = isinstance(f0data, np.ndarray)
+        is_dict = isinstance(f0data[0], dict)
 
         def fix_single_pre(p, gx):
             for i in range(-1, -len(gx) - 1, -1):
@@ -133,23 +131,22 @@ class Khistory:
                 p = (p - gx[i][1]) / (1 + gx[i][0])
             return round(p, 3)
 
-        if is_numpy:
-            # 处理 numpy 数组
+        if is_dict:
             result = f0data.copy()
             fid = len(result) - 1
             gx = [(0, 0)]
 
             # 移除超出范围的分红数据
-            while len(bndata) > 0 and bndata[-1].ex_dividend_date > result['time'][-1]:
+            while len(bndata) > 0 and bndata[-1].ex_dividend_date > result[-1]['time']:
                 bndata.pop()
 
             for bi in range(-1, -len(bndata) - 1, -1):
                 while fid >= 0:
-                    if result['time'][fid] >= bndata[bi].ex_dividend_date:
-                        result['open'][fid] = fix_single_pre(float(result['open'][fid]), gx)
-                        result['high'][fid] = fix_single_pre(float(result['high'][fid]), gx)
-                        result['low'][fid] = fix_single_pre(float(result['low'][fid]), gx)
-                        result['close'][fid] = fix_single_pre(float(result['close'][fid]), gx)
+                    if result[fid]['time'] >= bndata[bi].ex_dividend_date:
+                        result[fid]['open'] = fix_single_pre(float(result[fid]['open']), gx)
+                        result[fid]['high'] = fix_single_pre(float(result[fid]['high']), gx)
+                        result[fid]['low'] = fix_single_pre(float(result[fid]['low']), gx)
+                        result[fid]['close'] = fix_single_pre(float(result[fid]['close']), gx)
                         fid -= 1
                         continue
 
@@ -162,10 +159,10 @@ class Khistory:
                     break
 
             while fid >= 0:
-                result['open'][fid] = fix_single_pre(float(result['open'][fid]), gx)
-                result['high'][fid] = fix_single_pre(float(result['high'][fid]), gx)
-                result['low'][fid] = fix_single_pre(float(result['low'][fid]), gx)
-                result['close'][fid] = fix_single_pre(float(result['close'][fid]), gx)
+                result[fid]['open'] = fix_single_pre(float(result[fid]['open']), gx)
+                result[fid]['high'] = fix_single_pre(float(result[fid]['high']), gx)
+                result[fid]['low'] = fix_single_pre(float(result[fid]['low']), gx)
+                result[fid]['close'] = fix_single_pre(float(result[fid]['close']), gx)
                 fid -= 1
 
             return result
@@ -210,14 +207,14 @@ class Khistory:
         后复权
 
         Args:
-            f0data: numpy 结构化数组或元组列表
+            f0data: dict数组或元组列表
             bndata: 分红数据列表
 
         Returns:
             与输入相同类型的复权后数据
         """
         # 判断输入类型
-        is_numpy = isinstance(f0data, np.ndarray)
+        is_dict = isinstance(f0data, dict)
 
         def fix_single_post(p, gx):
             for i in range(0, len(gx)):
@@ -229,19 +226,18 @@ class Khistory:
                 p = p * (1 + gx[i][0]) + gx[i][1]
             return round(p, 3)
 
-        if is_numpy:
-            # 处理 numpy 数组
+        if is_dict:
             result = f0data.copy()
             gx = [(0, 0)]
             fid = 0
 
             for bi in range(0, len(bndata)):
                 while fid < len(result):
-                    if result['time'][fid] < bndata[bi].ex_dividend_date:
-                        result['open'][fid] = fix_single_post(float(result['open'][fid]), gx)
-                        result['high'][fid] = fix_single_post(float(result['high'][fid]), gx)
-                        result['low'][fid] = fix_single_post(float(result['low'][fid]), gx)
-                        result['close'][fid] = fix_single_post(float(result['close'][fid]), gx)
+                    if result[fid]['time'] < bndata[bi].ex_dividend_date:
+                        result[fid]['open'] = fix_single_post(float(result[fid]['open']), gx)
+                        result[fid]['high'] = fix_single_post(float(result[fid]['high']), gx)
+                        result[fid]['low'] = fix_single_post(float(result[fid]['low']), gx)
+                        result[fid]['close'] = fix_single_post(float(result[fid]['close']), gx)
                         fid += 1
                         continue
 
@@ -254,10 +250,10 @@ class Khistory:
                     break
 
             while fid < len(result):
-                result['open'][fid] = fix_single_post(float(result['open'][fid]), gx)
-                result['high'][fid] = fix_single_post(float(result['high'][fid]), gx)
-                result['low'][fid] = fix_single_post(float(result['low'][fid]), gx)
-                result['close'][fid] = fix_single_post(float(result['close'][fid]), gx)
+                result[fid]['open'] = fix_single_post(float(result[fid]['open']), gx)
+                result[fid]['high'] = fix_single_post(float(result[fid]['high']), gx)
+                result[fid]['low'] = fix_single_post(float(result[fid]['low']), gx)
+                result[fid]['close'] = fix_single_post(float(result[fid]['close']), gx)
                 fid += 1
 
             return result
@@ -318,8 +314,8 @@ class Khistory:
         return f0data
 
     @classmethod
-    def save_kline(cls, code: str, kline_type: str|int, kldata: np.ndarray):
-        """保存K线数据到HDF5文件"""
+    async def save_kline(cls, code: str, kline_type: str|int, kldata: List[dict]):
+        """保存K线数据到SQLite存储"""
         if len(kldata) == 0:
             return False
         klt = srt.to_int_kltype(kline_type)
@@ -327,29 +323,15 @@ class Khistory:
             logger.error(f'kline_type {klt} not in saved_kline_types')
             return False
         if klt == 101:
-            close = kldata['close']
-            if 'change_px' not in kldata.dtype.names:
-                change_px = np.empty_like(close, dtype=np.float64)
-                if len(close) > 1:
-                    change_px[1:] = close[1:] - close[:-1]
-                kldata = append_fields(kldata, 'change_px', change_px)
+            for i, k in enumerate(kldata):
+                if 'change_px' not in k:
+                    kldata[i]['change_px'] = k['close'] - kldata[i-1]['close'] if i > 0 else 0
+                if 'change' not in k:
+                    kldata[i]['change'] = k['change_px'] / kldata[i-1]['close'] if i > 0 else 0
+                if 'amplitude' not in k:
+                    kldata[i]['amplitude'] = (k['high'] - k['low']) / kldata[i-1]['close'] if i > 0 else 0
 
-            if 'change' not in kldata.dtype.names:
-                change_px = kldata['change_px']
-                change = np.empty_like(close, dtype=np.float64)
-                if len(close) > 1:
-                    change[1:] = change_px[1:] / close[:-1]
-                kldata = append_fields(kldata, 'change', change)
-
-            if 'amplitude' not in kldata.dtype.names:
-                high = kldata['high']
-                low = kldata['low']
-                amplitude = np.empty_like(close, dtype=np.float64)
-                if len(close) > 1:
-                    amplitude[1:] = (high[1:] - low[1:]) / close[:-1]
-                kldata = append_fields(kldata, 'amplitude', amplitude)
-
-        kls.save_dataset(code, kldata, klt)
+        await kls.save_kline_data(code, kldata, klt)
 
 
 class StockList():
@@ -563,7 +545,7 @@ class FflowRequest(EmRequest):
         if fflow is None or len(fflow) == 0:
             return
 
-        maxdate = ffs.max_date(self.code)
+        maxdate = await fls.get_latest_time(self.code)
         if len(fflow) == 1 and TradingDate.prev_trading_date(fflow[0][0]) != maxdate:
             logger.info(f'Stock_Fflow_History got only 1 data {self.code}, and not continously, discarded!')
             return
@@ -571,7 +553,7 @@ class FflowRequest(EmRequest):
         fflow = [f for f in fflow if f[0] > maxdate]
         if not fflow or len(fflow) == 0:
             return
-        ffs.save_fflow(self.code, fflow)
+        await fls.save_fflow(self.code, fflow)
 
 
 class FflowHistory:
@@ -580,25 +562,27 @@ class FflowHistory:
         return FflowRequest()
 
     @classmethod
-    def max_date(self, code):
-        return ffs.max_date(code)
+    async def max_date(self, code):
+        return await fls.get_latest_time(code)
 
     @classmethod
-    def save_fflow(self, code, fflow):
-        ffs.save_fflow(code, fflow)
+    async def save_fflow(self, code, fflow):
+         await fls.save_fflow(code, fflow)
 
     @classmethod
     async def update_fflow(cls, code):
-        if cls.max_date(code) == TradingDate.max_trading_date():
+        mxdate = await cls.max_date(code)
+        if mxdate == TradingDate.max_trading_date():
             return
         cls.fclient.setCode(code)
         await cls.fclient.getNext()
 
     @classmethod
-    def get_main_fflow(cls, code, date=None, date1=None):
+    async def get_main_fflow(cls, code, date=None, date1=None):
         if date is None:
-            date = ffs.max_date(code)
-        return ffs.read_fflow(code, date, date1)
+            date = await fls.get_latest_time(code)
+        fflow_data = await fls.read_fflow(code, date, date1)
+        return fflow_data
 
 
 class StockBkMap(EmRequest):

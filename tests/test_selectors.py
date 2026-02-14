@@ -19,7 +19,7 @@ class TestSelector(unittest.IsolatedAsyncioTestCase):
         self.assertIsInstance(x, list)
 
     async def test_dailyzt_selector(self):
-        sz = StockZtDaily()
+        sz = StockTrippleBullSelector()
         await sz.start_multi_task('2026-02-06')
         self.assertIsInstance(sz.wkstocks, list)
 

@@ -11,6 +11,7 @@ from app.admin.router import admin_user_list
 from app.users.manager import UserStockManager as usm
 from app.stock.manager import AllStocks, khis
 from app.stock.date import TradingDate
+from app.stock.storage.storage_manager import DataSyncManager
 
 logger = logging.getLogger(f'{Config.app_name}.{__package__}')
 
@@ -41,9 +42,10 @@ class WeeklyUpdater():
                 if stkrec.typekind in ('ETF', 'LOF', 'ABStock', 'BJStock'):
                     allcodes.append(c)
         stocks = list(set(allcodes))
-        AllStocks.update_klines_by_code(stocks, 'w')
+        await AllStocks.update_klines_by_code(stocks, 'w')
         await cls.update_holidays()
         await cls.update_quit_stocks()
+        await cls.sync_storage_sqlite_to_h5()
         logger.info('Weekly update finished.')
 
     @classmethod
@@ -60,10 +62,18 @@ class WeeklyUpdater():
         for s in qstocks:
             if s.typekind == 'TSStock' and not s.quit_date:
                 quit_stocks.append(s.code)
-        AllStocks.update_klines_by_code(quit_stocks, 'd')
+        await AllStocks.update_klines_by_code(quit_stocks, 'd')
         for c in quit_stocks:
-            date = khis.max_date(c, 'd')
+            date = await khis.max_date(c, 'd')
             await AllStocks.update_stock({'code': c, 'quit_date': date})
+
+    @classmethod
+    async def sync_storage_sqlite_to_h5(cls):
+        dsm = DataSyncManager()
+        results = await dsm.sync_sqlite_to_h5()
+        logger.info('sync_storage_sqlite_to_h5: %s', results)
+        await dsm.compact_sqlite()
+
 
 if __name__ == '__main__':
     loop = asyncio.get_event_loop()

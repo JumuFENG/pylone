@@ -1,0 +1,11 @@
+.git/
+*.log
+*.tmp
+.DS_Store
+__pycache__/
+*.pyc
+.env
+dist/
+data/
+tests/
+.pytest_cache/

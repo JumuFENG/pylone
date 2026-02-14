@@ -1,7 +1,6 @@
 import sys
 import json
 import gzip
-import numpy as np
 import emxg
 import stockrt as srt
 from typing import List, Tuple
@@ -20,7 +19,7 @@ from .history import (
     StockList)
 from app.selectors import SelectorsFactory as sfac
 from .date import TradingDate
-from .h5 import TransactionStorage as sts
+from .storage.sqlite import tss
 
 
 class AllStocks:
@@ -92,10 +91,13 @@ class AllStocks:
         if not target_code:
             return
 
-        cls.update_klines_by_code(target_code, kltype)
+        await cls.update_klines_by_code(target_code, kltype)
+        if 'sh000001' in target_code:
+            mxdate = await khis.max_date('sh000001')
+            TradingDate.update_max_traded_date(mxdate)
 
     @classmethod
-    def update_klines_by_code(cls, stocks, kltype: str='d') -> List[str]:
+    async def update_klines_by_code(cls, stocks, kltype: str='d') -> List[str]:
         """
         Updates the K-line data for a list of stock codes based on the specified K-line type.
 
@@ -107,7 +109,7 @@ class AllStocks:
             A list of stock codes for which the K-line data was not updated.
 
         """
-        uplens = {c: khis.count_bars_to_updated(c, kltype) for c in stocks}
+        uplens = {c: await khis.count_bars_to_updated(c, kltype) for c in stocks}
         fixlens = {}
         for c,l in uplens.items():
             if l == 0:
@@ -121,7 +123,7 @@ class AllStocks:
             logger.warning('too many stocks to update for 1 day, please call update_kline_data("d") first!')
             return
 
-        def update_and_save(codes, length, fkl=False):
+        async def update_and_save(codes, length, fkl=False):
             # tdx = srt.rtsource('tdx')
             # func = tdx.fklines if fkl else tdx.klines
             func = srt.fklines if fkl else srt.klines
@@ -129,9 +131,9 @@ class AllStocks:
             klines = func(*args)
             for c in klines:
                 if c in stocks:
-                    khis.save_kline(c, kltype, klines[c])
+                    await khis.save_kline(c, kltype, klines[c])
 
-        ofmt = srt.set_array_format('np')
+        ofmt = srt.set_array_format('json')
         # srt.set_default_sources('dklines', 'dklines', ('xueqiu', 'ths', 'eastmoney', 'tdx', 'sina'), True)
         srt.set_default_sources('dklines', 'dklines', ('xueqiu', 'ths', 'tdx', 'sina'), True)
         ksize = 500
@@ -139,11 +141,11 @@ class AllStocks:
             if l == sys.maxsize:
                 for i in range(0, len(codes), ksize):
                     batch = codes[i:i+ksize]
-                    update_and_save(batch, l, fkl=True)
+                    await update_and_save(batch, l, fkl=True)
             else:
                 for i in range(0, len(codes), ksize):
                     batch = codes[i:i+ksize]
-                    update_and_save(batch, l, fkl=False)
+                    await update_and_save(batch, l, fkl=False)
         srt.set_array_format(ofmt)
 
     @classmethod
@@ -178,17 +180,14 @@ class AllStocks:
             if kl['open'] == 0 or kl['high'] == 0 or kl['low'] == 0 or kl['close'] == 0:
                 logger.warning(f'invalid kline for {c}')
                 continue
-            mxdate = khis.max_date(c, 'd')
+            mxdate = await khis.max_date(c, 'd')
             if TradingDate.prev_trading_date(TradingDate.max_trading_date()) == mxdate:
-                dtypes = [('time', 'U10'), ('open', 'float'), ('high', 'float'), ('low', 'float'), ('close', 'float'),
-                          ('volume', 'int64'), ('amount', 'int64'), ('change', 'float'), ('change_px', 'float'), ('amplitude', 'float')]
-                npkl = np.array([(kl['time'], kl['open'], kl['high'], kl['low'], kl['close'], kl['volume'], kl['amount'], kl['change'], kl['change_px'], kl['amplitude'])], dtype=dtypes)
-                khis.save_kline(c, 'd', npkl)
+                await khis.save_kline(c, 'd', [kl])
             else:
                 unconfirmed.append(c)
-            mxfdate = fhis.max_date(c)
+            mxfdate = await fhis.max_date(c)
             if 'main' in kl and TradingDate.prev_trading_date(TradingDate.max_trading_date()) == mxfdate:
-                fhis.save_fflow(c, [[kl['time'], kl['main'], kl['small'], kl['middle'], kl['big'], kl['super'], kl['mainp'], kl['smallp'], kl['middlep'], kl['bigp'], kl['superp']]])
+                await fhis.save_fflow(c, [kl])
             if c in cns and cns[c] != kl['name']:
                 await upsert_one(cls.db, {"code": c, "name": kl['name']}, ["code"])
         return unconfirmed
@@ -207,11 +206,17 @@ class AllStocks:
             return
         rows = await query_values(cls.db)
         stocks = [r.code for r in rows if r.code.startswith(('sh', 'sz', 'bj')) and r.typekind in ('ABStock', 'BJStock') and (r.setup_date is None or r.setup_date <= TradingDate.max_trading_date())]
-        cls.update_transactions_by_code(stocks)
+        await cls.update_transactions_by_code(stocks)
 
     @classmethod
-    def update_transactions_by_code(cls, stocks: list = None):
-        stocks = [s for s in stocks if sts.max_date(s) < TradingDate.max_trading_date()]
+    async def update_transactions_by_code(cls, stocks: list = None):
+        # 使用trans_adapter获取最新交易时间
+        stocks_with_time = []
+        for s in stocks:
+            max_time = await tss.get_latest_time(s)
+            if max_time and max_time < TradingDate.max_trading_date():
+                stocks_with_time.append(s)
+        stocks = stocks_with_time
         if not stocks:
             logger.info('no stocks need to update transactions')
             return
@@ -235,8 +240,12 @@ class AllStocks:
                     continue
                 cols = ['time', 'price', 'volume', 'num', 'bs'] if len(v[0]) == 5 else ['time', 'price', 'volume', 'bs']
                 trdata = [tuple([t[0] if ' ' in t[0] else f'{date} {t[0]}'] + t[1:]) for t in v]
-                nptrans = np.array(trdata, [(c, sts.restore_dtype.get(c, 'float64')) for c in cols])
-                sts.save_dataset(k, nptrans)
+                trans_dicts = []
+                for t in trdata:
+                    trans_dict = dict(zip(cols, t))
+                    trans_dicts.append(trans_dict)
+
+                await tss.save_transaction(k, trans_dicts)
             logger.info(f'saved transactions for stocks: {i} - {i+len(batch)} / {len(stocks)}')
         srt.set_array_format(ofmt)
 
@@ -308,7 +317,7 @@ class AllStocks:
         return clist
 
     @classmethod
-    def get_stocks_zdfrank(cls, minzdf=8):
+    def get_stocks_zdfrank(cls, minzdf=None):
         if minzdf is None:
             stocks = srt.stock_list()
             if stocks is None or 'all' not in stocks:
@@ -376,17 +385,18 @@ class AllStocks:
             '涨跌幅:前复权': 'change', '成交量(股)': 'volume', '成交量': 'volume', '开盘价:前复权': 'open', '开盘价': 'open',
             '最高价:前复权': 'high', '最高价(日线不复权)': 'high', '最低价:前复权': 'low', '最低价(日线不复权)': 'low', '成交额': 'amount'
         })
-        pdata = emxg.convert_column(pdata, 'code', srt.get_fullcode)
+        pdata = pdata.assign(code=lambda x: x['code'].apply(srt.get_fullcode) if hasattr(x['code'], 'apply') else srt.get_fullcode(x['code']))
         if 'lclose' not in pdata.columns:
             if 'change_px' not in pdata.columns:
-                pdata['lclose'] = pdata['close'] / (1 + pdata['change'])
-                pdata['change_px'] = pdata['close'] - pdata['lclose']
+                pdata = pdata.assign(lclose=lambda x: x['close'] / (1 + x['change']))
+                pdata = pdata.assign(change_px=lambda x: x['close'] - x['lclose'])
             else:
-                pdata['lclose'] = pdata['close'] - pdata['change_px']
+                pdata = pdata.assign(lclose=lambda x: x['close'] - x['change_px'])
+
         if 'amount' not in pdata.columns:
-            pdata['amount'] = pdata['close'] * pdata['volume']
+            pdata = pdata.assign(amount=lambda x: x['close'] * x['volume'])
         if 'open' not in pdata.columns:
-            pdata['open'] = pdata['lclose']
+            pdata = pdata.assign(open=lambda x: x['lclose'])
         result = pdata[['code', 'name', 'close', 'high', 'low', 'open', 'change', 'volume', 'amount', 'change_px', 'lclose']].to_dict('records')
         return result
 

@@ -10,7 +10,7 @@ import numpy as np
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from app.lofig import Config
-from app.stock.h5 import KLineStorage as kls, TransactionStorage as sts
+from app.stock.storage.h5 import KLineStorage as kls, TransactionStorage as sts
 
 class TestH5file(unittest.TestCase):
     def test_get_kline(self):

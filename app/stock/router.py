@@ -260,7 +260,7 @@ async def stock_kline(
             if data is None:
                 codes_unsaved.append(c)
                 continue
-            result[c] = data.tolist()
+            result[c] = [list(kl.values()) for kl in data]
             if result[c][-1][0] < TradingDate.max_trading_date():
                 codes_unfinished.append(c)
 
@@ -308,7 +308,7 @@ def stock_tlines(code: str = Query(..., min_length=6)):
 async def stock_fflow(code: str = Query(..., min_length=6), date: str = Query(None, min_length=8, max_length=10)):
     try:
         code = srt.get_fullcode(code)
-        return fhis.get_main_fflow(code, date)
+        return await fhis.get_main_fflow(code, date)
     except Exception as e:
         logger.error(e)
         logger.debug(format_exc())

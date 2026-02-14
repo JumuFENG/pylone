@@ -47,16 +47,3 @@ def delay_seconds(daytime:str)->float:
 
 def to_cls_secucode(code):
     return code[2:] + '.BJ' if code.startswith('bj') else code.lower()
-
-class FixedPointConverter:
-    def __init__(self, precision=4):
-        self.precision = precision
-        self.scale = 10 ** precision
-
-    def float_to_int(self, float_array, dtype='int32'):
-        """将浮点数转换为整数"""
-        return (float_array * self.scale).astype(dtype)
-
-    def int_to_float(self, int_array):
-        """将整数转换回浮点数"""
-        return int_array.astype('float64') / self.scale

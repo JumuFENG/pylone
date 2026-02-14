@@ -1,16 +1,29 @@
 import os
 import h5py
 import numpy as np
-from typing import Union
+from typing import Union, List, Dict, Any
 from functools import lru_cache
 from datetime import datetime
 import stockrt as srt
 from app.lofig import Config, logger
-from app.hu import classproperty, FixedPointConverter
+from app.hu import classproperty
 
 
 # https://github.com/JumuFENG/hikyuu/blob/master/hikyuu/data/common_h5.py
 # https://github.com/JumuFENG/hikyuu/blob/master/hikyuu/data/pytdx_to_h5.py
+
+class FixedPointConverter:
+    def __init__(self, precision=4):
+        self.precision = precision
+        self.scale = 10 ** precision
+
+    def float_to_int(self, float_array, dtype='int32'):
+        """将浮点数转换为整数"""
+        return (float_array * self.scale).astype(dtype)
+
+    def int_to_float(self, int_array):
+        """将整数转换回浮点数"""
+        return int_array.astype('float64') / self.scale
 
 class TimeConverter:
     def __init__(self, time_fmt='%Y-%m-%d %H:%M:%S'):
@@ -52,6 +65,80 @@ class H5Storage:
     @classproperty
     def date_converter(cls):
         return TimeConverter()
+
+    @classmethod
+    def numpy_to_list_of_dicts(cls, np_array: np.ndarray) -> list:
+        """
+        将numpy结构化数组转换为list-of-dict格式
+
+        Args:
+            np_array: numpy结构化数组
+
+        Returns:
+            list-of-dict格式的数据
+        """
+        if np_array is None or len(np_array) == 0:
+            return []
+
+        result = []
+        for row in np_array:
+            row_dict = {}
+            for field_name in np_array.dtype.names:
+                value = row[field_name]
+                # 处理numpy类型，转换为Python原生类型
+                if hasattr(value, 'item'):
+                    value = value.item()
+                row_dict[field_name] = value
+            result.append(row_dict)
+
+        return result
+
+    @classmethod
+    def list_of_dicts_to_numpy(cls, data_list: list, dtype_def: dict) -> np.ndarray:
+        """
+        将list-of-dict格式转换为numpy结构化数组
+
+        Args:
+            data_list: list-of-dict格式的数据
+            dtype_def: 数据类型定义
+
+        Returns:
+            numpy结构化数组
+        """
+        if not data_list:
+            # 构建numpy dtype
+            dtype_list = []
+            for col_name, col_type in dtype_def.items():
+                if col_type == 'str':
+                    numpy_type = 'U20'  # Unicode字符串
+                elif col_type == 'float':
+                    numpy_type = 'float64'
+                elif col_type == 'int':
+                    numpy_type = 'int64'
+                else:
+                    numpy_type = 'float64'
+                dtype_list.append((col_name, numpy_type))
+
+            return np.array([], dtype=dtype_list)
+
+        # 转换数据
+        result_data = []
+        for row_dict in data_list:
+            row = []
+            for col_name, _ in dtype_def.items():
+                value = row_dict.get(col_name)
+                # 设置默认值
+                if value is None:
+                    if col_name in ['open', 'high', 'low', 'close', 'change', 'change_px', 'amplitude', 'turnover']:
+                        value = 0.0
+                    elif col_name in ['volume', 'amount']:
+                        value = 0
+                    else:
+                        value = ""
+                row.append(value)
+            result_data.append(tuple(row))
+
+        return np.array(result_data, dtype=[(col, dtype) for col, dtype in dtype_def.items()])
 
     @classproperty
     def known_cols(cls):
@@ -123,9 +210,17 @@ class H5Storage:
         return 'data'
 
     @classmethod
-    def save_dataset(cls, fcode: str, ds_data: np.ndarray = None, kline_type: Union[int, str] = 101):
+    def save_dataset(cls, fcode: str, ds_data = None, kline_type: Union[int, str] = 101):
         """新数据连续且按时间排序"""
         if ds_data is None or len(ds_data) == 0:
+            return
+
+        # 处理数据格式：如果是list-of-dict，转换为numpy数组
+        if isinstance(ds_data, list):
+            dtypes = cls.saved_dtype.copy()
+            dtypes.update(cls.restore_dtype)
+            ds_data = cls.list_of_dicts_to_numpy(ds_data, dtypes)
+        elif ds_data is None:
             return
 
         dset_int = cls.prepare_data(ds_data)
@@ -197,7 +292,7 @@ class H5Storage:
                 return ''
             idx = -1 if max_or_min else 0
             fl_time_str = cls.date_converter.int_to_time(np.array([dset[idx]['time']]))[0]
-            if kline_type > 100 and kline_type % 15 != 0:
+            if kline_type and kline_type > 100 and kline_type % 15 != 0:
                 fl_time_str = fl_time_str.split(' ')[0]
             return fl_time_str
 
@@ -205,7 +300,7 @@ class H5Storage:
     def max_date(cls, fcode: str, kline_type: int=101):
         """获取最大/最小日期"""
         return cls._min_max_date(True, fcode, kline_type)
-        
+
     @classmethod
     def min_date(cls, fcode: str, kline_type: int=101):
         """获取最小日期"""
@@ -297,13 +392,17 @@ class KLineStorage(H5Storage):
         if kline_type not in cls.saved_kline_types:
             if kline_type % 15 == 0:
                 saved_klines = cls.read_saved_data(fcode, length*kline_type/15, 15)
-                return cls.extend_kline_data(saved_klines, 15, kline_type)
+                extended_klines = cls.extend_kline_data(saved_klines, 15, kline_type)
+                return cls.numpy_to_list_of_dicts(extended_klines)
             if kline_type % 5 == 0:
                 saved_klines = cls.read_saved_data(fcode, length*kline_type/5, 5)
-                return cls.extend_kline_data(saved_klines, 5, kline_type)
+                extended_klines = cls.extend_kline_data(saved_klines, 5, kline_type)
+                return cls.numpy_to_list_of_dicts(extended_klines)
             saved_klines = cls.read_saved_data(fcode, length*kline_type, 1)
-            return cls.extend_kline_data(saved_klines, 1, kline_type)
-        return cls.read_saved_data(fcode, length, kline_type)
+            extended_klines = cls.extend_kline_data(saved_klines, 1, kline_type)
+            return cls.numpy_to_list_of_dicts(extended_klines)
+        klines = cls.read_saved_data(fcode, length, kline_type)
+        return cls.numpy_to_list_of_dicts(klines)
 
 class KLineTsStorage(KLineStorage):
     @classmethod
@@ -343,19 +442,6 @@ class FflowStorage(H5Storage):
         return f"{histroy_dir}/fflow.h5"
 
     @classmethod
-    def save_fflow(cls, code, fflow):
-        dtypes = [
-            ('time', 'U10'), ('main', 'int64'), ('small', 'int64'), ('middle', 'int64'), ('big', 'int64'), ('super', 'int64'),
-            ('mainp', 'float'), ('smallp', 'float'), ('middlep', 'float'), ('bigp', 'float'), ('superp', 'float')]
-        values = np.array([(
-            f[0], int(float(f[1])), int(float(f[2])), int(float(f[3])), int(float(f[4])), int(float(f[5])),
-            float(f[6])/100, float(f[7])/100, float(f[8])/100, float(f[9])/100, float(f[10])/100)
-            for f in fflow],
-            dtype=dtypes
-        )
-        cls.save_dataset(code, values)
-
-    @classmethod
     def read_fflow(cls, code, date=None, date1=None):
         fflow = cls.read_saved_data(code)
         if fflow is None:
@@ -364,7 +450,7 @@ class FflowStorage(H5Storage):
             fflow = fflow[fflow['time'] >= date]
         if date1 is not None:
             fflow = fflow[fflow['time'] <= date1]
-        return fflow.tolist()
+        return cls.numpy_to_list_of_dicts(fflow)
 
 
 class TransactionStorage(H5Storage):
@@ -395,6 +481,23 @@ class TransactionStorage(H5Storage):
         return False
 
     @classmethod
+    def _min_max_date(cls, max_or_min, fcode, kline_type = None):
+        return super()._min_max_date(max_or_min, fcode, None)
+
+    @classmethod
     def h5_saved_path(cls, fcode: str=None, kline_type: int=101) -> str:
         histroy_dir = Config.h5_history_dir()
         return f"{histroy_dir}/trans_{fcode[2:5]}.h5"
+
+    @classmethod
+    def read_transaction(cls, fcode: str, date=None, date1=None, limit: int = None) -> List[Dict[str, Any]]:
+        data = cls.read_saved_data(fcode)
+        if data is None:
+            return []
+        if date is not None:
+            data = data[data['time'] >= date]
+        if date1 is not None:
+            data = data[data['time'] <= date1]
+        if limit is not None:
+            data = data[-limit:]
+        return cls.numpy_to_list_of_dicts(data)

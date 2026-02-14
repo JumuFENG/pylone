@@ -85,11 +85,11 @@ class DailyUpdater():
                     stkcodes.append(c)
 
         stkcodes = list(set(stkcodes))
-        AllStocks.update_klines_by_code(stkcodes, 'd')
+        await AllStocks.update_klines_by_code(stkcodes, 'd')
 
         upfailed = []
         for c in stkcodes:
-            date = khis.max_date(c, 'd')
+            date = await khis.max_date(c, 'd')
             if TradingDate.calc_trading_days(date, TradingDate.max_trading_date()) > 20:
                 upfailed.append(c)
         if upfailed:
@@ -98,20 +98,20 @@ class DailyUpdater():
 
         logger.info('download all stocks khistory done! %d' % len(stkcodes))
 
-        AllStocks.update_klines_by_code(fundcodes, 'd')
+        await AllStocks.update_klines_by_code(fundcodes, 'd')
         logger.info('funds history updated!')
         if await SystemSettings.get('daily_15min', '0') == '1':
             logger.info('update fund 15min history')
-            AllStocks.update_klines_by_code(fundcodes, 15)
+            await AllStocks.update_klines_by_code(fundcodes, 15)
         if await SystemSettings.get('daily_5min', '0') == '1':
             logger.info('update fund 5min history')
-            AllStocks.update_klines_by_code(fundcodes, 5)
+            await AllStocks.update_klines_by_code(fundcodes, 5)
         if await SystemSettings.get('daily_1min', '0') == '1':
             logger.info('update fund 1min history')
-            AllStocks.update_klines_by_code(fundcodes, 1)
+            await AllStocks.update_klines_by_code(fundcodes, 1)
         if await SystemSettings.get('daily_trans', '0') == '1':
             logger.info('update daily transactions')
-            AllStocks.update_transactions_by_code(fundcodes)
+            await AllStocks.update_transactions_by_code(fundcodes)
 
         logger.info('download all funds khistory done! %d' % len(fundcodes))
 
@@ -169,6 +169,7 @@ class DailyUpdater():
         'StockTrippleBullSelector',
         #     'StockEndVolumeSelector'
         ]
+
         for s in selectors:
             sel = sfac.get(s)
             logger.info(f'update {s}')
