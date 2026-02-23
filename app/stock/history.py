@@ -546,6 +546,8 @@ class FflowRequest(EmRequest):
             return
 
         maxdate = await fls.get_latest_time(self.code)
+        if maxdate is None:
+            maxdate = ''
         if len(fflow) == 1 and TradingDate.prev_trading_date(fflow[0][0]) != maxdate:
             logger.info(f'Stock_Fflow_History got only 1 data {self.code}, and not continously, discarded!')
             return

@@ -483,6 +483,13 @@ class FflowSQLiteStorage(SQLiteStorage):
         prepared_data = []
 
         for item in data:
+            if isinstance(item, list):
+                prepared_data.append({
+                    'time': item[0], 'main': int(float(item[1])), 'small': int(float(item[2])), 'middle': int(float(item[3])),
+                    'big': int(float(item[4])), 'super': int(float(item[5])), 'mainp': float(item[6])/100, 'smallp': float(item[7])/100,
+                    'middlep': float(item[8])/100, 'bigp': float(item[9])/100, 'superp': float(item[10])/100
+                })
+                continue
             row = {}
             for col_name in self.saved_dtype.keys():
                 if col_name in item:
