@@ -1,13 +1,21 @@
+import jwt
 import json
-from fastapi_users import FastAPIUsers, BaseUserManager, exceptions
-from fastapi_users.authentication import (
-    CookieTransport,
-    BearerTransport,
-    AuthenticationBackend,
-    JWTStrategy
-)
-from fastapi_users.db import SQLAlchemyUserDatabase
-from typing import AsyncGenerator, Optional
+try:
+    from fastapi_users import FastAPIUsers, BaseUserManager, exceptions
+    from fastapi_users.authentication import (
+        CookieTransport,
+        BearerTransport,
+        AuthenticationBackend,
+        JWTStrategy
+    )
+    from fastapi_users.db import SQLAlchemyUserDatabase
+    from fastapi_users.password import PasswordHelper
+    CRYPTO_AVAILABLE = True
+except ImportError:
+    CRYPTO_AVAILABLE = False
+
+# Import other required modules
+from typing import AsyncGenerator, Optional, Union
 from sqlalchemy import select
 from fastapi import Depends
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
@@ -28,25 +36,93 @@ from .schemas import UserRead, UserCreate, UserUpdate
 cfg = {'jwt_secret': 'JWT_SECRET_SHOULD_CHANGE_IN_PRODUCTION', 'jwt_lifetime_seconds': 2592000, 'cookie_secure': False}
 cfg.update(Config.client_config())
 
-# Cookie 认证传输
-cookie_transport = CookieTransport(cookie_secure=cfg['cookie_secure'])
+# Fallback implementations when cryptography is not available
+if not CRYPTO_AVAILABLE:
+    from passlib.context import CryptContext
+    import time
 
-# Bearer Token 认证传输
+    # Use bcrypt via passlib for password hashing
+    pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+    class FallbackPasswordHelper:
+        """Fallback password helper using passlib/bcrypt"""
+
+        @staticmethod
+        def hash(password: str) -> str:
+            return pwd_context.hash(password)
+
+        @staticmethod
+        def verify(plain_password: str, hashed_password: str) -> bool:
+            return pwd_context.verify(plain_password, hashed_password)
+
+        @staticmethod
+        def verify_and_update(plain_password: str, hashed_password: str):
+            """Verify password and return (verified, updated_hash)"""
+            verified = pwd_context.verify(plain_password, hashed_password)
+            updated_hash = None
+            if verified and pwd_context.needs_update(hashed_password):
+                updated_hash = pwd_context.hash(plain_password)
+            return verified, updated_hash
+
+        @staticmethod
+        def generate() -> str:
+            """Generate a random password"""
+            import secrets
+            return secrets.token_urlsafe(12)
+
+    class FallbackJWTStrategy:
+        """Fallback JWT strategy using PyJWT"""
+
+        def __init__(self, secret: str, lifetime_seconds: int):
+            self.secret = secret
+            self.lifetime_seconds = lifetime_seconds
+
+        async def write_token(self, user) -> str:
+            """Generate JWT token for user"""
+            payload = {
+                'sub': str(user.id),
+                'email': getattr(user, 'email', None),
+                'username': getattr(user, 'username', None),
+                'exp': int(time.time()) + self.lifetime_seconds
+            }
+            return jwt.encode(payload, self.secret, algorithm="HS256")
+
+        async def read_token(self, token: str) -> Optional[dict]:
+            """Read and validate JWT token"""
+            try:
+                return jwt.decode(token, self.secret, algorithms=["HS256"])
+            except jwt.InvalidTokenError:
+                return None
+
+        async def destroy_token(self, token: str) -> None:
+            """JWT tokens are stateless, nothing to destroy"""
+            pass
+
+# Cookie and Bearer transport
+cookie_transport = CookieTransport(cookie_secure=cfg['cookie_secure'])
 bearer_transport = BearerTransport(tokenUrl="auth/bearer/login")
 
-def get_jwt_strategy() -> JWTStrategy:
-    return JWTStrategy(secret=cfg['jwt_secret'], lifetime_seconds=cfg['jwt_lifetime_seconds'])
+# Define get_jwt_strategy based on cryptography availability
+if CRYPTO_AVAILABLE:
+    def get_jwt_strategy() -> JWTStrategy:
+        return JWTStrategy(secret=cfg['jwt_secret'], lifetime_seconds=cfg['jwt_lifetime_seconds'])
+else:
+    def get_jwt_strategy() -> FallbackJWTStrategy:
+        return FallbackJWTStrategy(secret=cfg['jwt_secret'], lifetime_seconds=cfg['jwt_lifetime_seconds'])
+
+def _get_jwt_strategy():
+    return get_jwt_strategy()
 
 cookie_auth_backend = AuthenticationBackend(
     name="jwt-cookie",
     transport=cookie_transport,
-    get_strategy=get_jwt_strategy,
+    get_strategy=_get_jwt_strategy,
 )
 
 bearer_auth_backend = AuthenticationBackend(
     name="jwt-bearer",
     transport=bearer_transport,
-    get_strategy=get_jwt_strategy,
+    get_strategy=_get_jwt_strategy,
 )
 
 async def get_user_db() -> AsyncGenerator[SQLAlchemyUserDatabase, None]:
@@ -55,6 +131,10 @@ async def get_user_db() -> AsyncGenerator[SQLAlchemyUserDatabase, None]:
 
 
 class UserManager(BaseUserManager[User, int]):
+    # Use fallback password helper if cryptography not available
+    if not CRYPTO_AVAILABLE:
+        password_helper = FallbackPasswordHelper()
+
     def parse_id(self, value):
         return int(value)
 
@@ -186,7 +266,7 @@ class UserStockManager():
         return f'fk{cls.last_sid}'
 
     @classmethod
-    async def add_deals(cls, user: User, deals: dict|str):
+    async def add_deals(cls, user: User, deals: Union[dict, str]):
         if isinstance(deals, str):
             deals = json.loads(deals)
 
@@ -649,7 +729,7 @@ class UserStockManager():
         await upsert_one(UserUnknownDeals, updeal, ['user_id', 'time', 'code', 'typebs', 'sid'])
 
     @classmethod
-    async def fix_deals(cls, user: User, deals: dict|str):
+    async def fix_deals(cls, user: User, deals: Union[dict, str]):
         hdeals = deals if isinstance(deals, list) else json.loads(deals)
         cdeals = {}
         for d in hdeals:
@@ -871,7 +951,7 @@ class UserStockManager():
         return codes
 
     @classmethod
-    async def save_strategy(cls, user: User, code: str, strategy: dict|str):
+    async def save_strategy(cls, user: User, code: str, strategy: Union[dict, str]):
         strdata = strategy if isinstance(strategy, dict) else json.loads(strategy)
 
         ustk = {'user_id': user.id, 'code': code}
@@ -1009,11 +1089,11 @@ class UserStockManager():
         await upsert_one(UserEarning, {'user_id': user.id, 'date': date, 'cost': cost, 'amount': value}, ['user_id', 'date'])
 
     @classmethod
-    def save_costdog(cls, user: User, costdog: dict|str):
+    def save_costdog(cls, user: User, costdog: Union[dict, str]):
         pass
 
     @classmethod
-    def remove_user_stock_with_deals(cls, user: User, watch: dict|str):
+    def remove_user_stock_with_deals(cls, user: User, watch: Union[dict, str]):
         pass
 
     @classmethod

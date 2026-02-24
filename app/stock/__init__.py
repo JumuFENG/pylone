@@ -1,6 +1,6 @@
 import datetime
 import asyncio
-from typing import Callable, Any
+from typing import Callable, Any, Union
 from cachetools import TTLCache, LRUCache
 from functools import wraps, lru_cache
 from decimal import Decimal, ROUND_HALF_UP, ROUND_FLOOR, ROUND_CEILING
@@ -32,7 +32,7 @@ def get_cache(ttl=None):
 def make_cache_key(func: Callable, args: tuple, kwargs: dict) -> str:
     return f"{func.__qualname__}:{args}:{tuple(sorted(kwargs.items()))}"
 
-def dynamic_cache(ttl: int | None = None):
+def dynamic_cache(ttl: Union[int, None] = None):
     return _make_async_cache_decorator(get_cache, has_ttl=True)(ttl)
 
 def async_lru():

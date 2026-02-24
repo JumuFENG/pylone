@@ -1,0 +1,17 @@
+pyjwt
+passlib[bcrypt]
+bcrypt
+uvicorn[standard]
+sqlalchemy[asyncio]
+aiomysql
+aiosqlite
+fastapi-users[sqlalchemy]
+python-multipart
+pydantic[email]
+jinja2
+aiofiles
+requests
+tenacity
+beautifulsoup4
+cachetools
+brotli

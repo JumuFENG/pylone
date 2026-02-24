@@ -5,7 +5,7 @@ import hashlib
 from datetime import datetime
 from bs4 import BeautifulSoup
 from traceback import format_exc
-from typing import Optional, List, Any
+from typing import Optional, List, Any, Union
 import stockrt as srt
 from app.lofig import logger
 from app.hu import classproperty, time_stamp
@@ -31,8 +31,8 @@ class Khistory:
     def fund_bonus_handler(cls):
         return FundShareBonus()
 
-    @lru_cache(maxsize=1024)
     @staticmethod
+    @lru_cache(maxsize=1024)
     def guess_bars_since(last_date, kltype='d'):
         if last_date is None or last_date == '':
             return sys.maxsize
@@ -314,7 +314,7 @@ class Khistory:
         return f0data
 
     @classmethod
-    async def save_kline(cls, code: str, kline_type: str|int, kldata: List[dict]):
+    async def save_kline(cls, code: str, kline_type: Union[int, str], kldata: List[dict]):
         """保存K线数据到SQLite存储"""
         if len(kldata) == 0:
             return False

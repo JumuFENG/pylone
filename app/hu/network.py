@@ -2,6 +2,7 @@ import requests
 import time
 import json
 import brotli
+from typing import Union
 from tenacity import retry, wait_fixed, stop_after_attempt, retry_if_exception_type, wait_exponential
 from . import classproperty
 
@@ -32,7 +33,7 @@ class Network:
         wait=wait_exponential(multiplier=1, min=1, max=5),
         stop=stop_after_attempt(3),
         retry=retry_if_exception_type((requests.Timeout, requests.HTTPError, requests.ConnectionError)))
-    def fetch_url(cls, url: str, headers: dict=None, params: dict = None, timeout: int = 10) -> str | None:
+    def fetch_url(cls, url: str, headers: dict=None, params: dict = None, timeout: int = 10) -> Union[str, None]:
         if headers is None and params is None:
             response = cls.session.get(url, timeout=timeout)
         elif params is None:
