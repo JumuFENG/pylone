@@ -1,7 +1,10 @@
 import requests
 import time
 import json
-import brotli
+try:
+    import brotli
+except Exception:
+    brotli = None
 from typing import Union
 from tenacity import retry, wait_fixed, stop_after_attempt, retry_if_exception_type, wait_exponential
 from . import classproperty
@@ -20,7 +23,7 @@ class Network:
             'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:138.0) Gecko/20100101 Firefox/138.0',
             'Accept': '*/*',
             'Accept-Language': 'en-US,en;q=0.5',
-            'Accept-Encoding': 'gzip, deflate, br',
+            'Accept-Encoding': 'gzip, deflate, br' if brotli else 'gzip, deflate',
             'Connection': 'keep-alive'
         }
 
@@ -44,6 +47,8 @@ class Network:
             response = cls.session.get(url, params=params, headers=headers, timeout=timeout)
         response.raise_for_status()
         if response.headers.get('Content-Encoding') == 'br':
+            if not brotli:
+                raise RuntimeError("Brotli compression is not supported. Please install the 'brotli' library.")
             decompressed = brotli.decompress(response.content)
             return decompressed.decode('utf-8')
         return response.text

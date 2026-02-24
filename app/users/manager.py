@@ -11,7 +11,7 @@ try:
     from fastapi_users.db import SQLAlchemyUserDatabase
     from fastapi_users.password import PasswordHelper
     CRYPTO_AVAILABLE = True
-except ImportError:
+except Exception:
     CRYPTO_AVAILABLE = False
 
 # Import other required modules
