@@ -4,9 +4,8 @@ from typing import Optional
 from traceback import format_exc
 from app import PostParams, pparam_doc
 from app.lofig import logger
-from app.users.manager import (
-    User, fastapi_users, get_current_user_basic, verify_user,
-    UserStockManager as usm)
+from app.users.manager import (User, fastapi_users, get_current_user_basic, verify_user)
+from app.users.usmanager import UserStockManager as usm
 from app.admin.system_settings import SystemSettings
 from app.selectors import SelectorsFactory as sfac
 from .date import TradingDate

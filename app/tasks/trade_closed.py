@@ -13,7 +13,7 @@ from app.stock.date import TradingDate
 from app.stock.manager import AllStocks, AllBlocks
 from app.admin.router import admin_user_list
 from app.admin.system_settings import SystemSettings
-from app.users.manager import UserStockManager as usm
+from app.users.usmanager import UserStockManager as usm
 
 
 logger = logging.getLogger(f'{Config.app_name}.{__package__}')

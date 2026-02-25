@@ -1,9 +1,8 @@
-from fastapi_users.db import SQLAlchemyBaseUserTable
-from sqlalchemy import Column, String, Integer, SmallInteger, Float, PrimaryKeyConstraint
+from sqlalchemy import Column, String, Integer, SmallInteger, Float, PrimaryKeyConstraint, Boolean
 from app.db import Base
 
 
-class User(SQLAlchemyBaseUserTable, Base):
+class User(Base):
     __tablename__ = "users"
 
     id = Column(Integer, primary_key=True)
@@ -11,6 +10,11 @@ class User(SQLAlchemyBaseUserTable, Base):
     nickname = Column(String(50), nullable=True)
     parent_id = Column(Integer, nullable=True)
     realcash = Column(SmallInteger, nullable=False, default=1)
+    email = Column(String(320), unique=True, index=True, nullable=False)
+    hashed_password = Column(String(1024), nullable=False)
+    is_active = Column(Boolean, nullable=False, default=True)
+    is_superuser = Column(Boolean, nullable=False, default=False)
+    is_verified = Column(Boolean, nullable=False, default=False)
 
 
 class UserStocks(Base):

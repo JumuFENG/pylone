@@ -14,9 +14,9 @@ from .manager import (
     get_user_manager,
     get_current_user_basic,
     get_jwt_strategy,
-    cfg,
-    UserStockManager as usm
+    cfg
 )
+from .usmanager import UserStockManager as usm
 from .schemas import UserRead, UserCreate, UserUpdate
 from .models import User
 

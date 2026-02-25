@@ -8,7 +8,7 @@ sys.path.insert(0, os.path.realpath(os.path.dirname(__file__) + '/../..'))
 
 from app.lofig import Config, logging
 from app.admin.router import admin_user_list
-from app.users.manager import UserStockManager as usm
+from app.users.usmanager import UserStockManager as usm
 from app.stock.manager import AllStocks, khis
 from app.stock.date import TradingDate
 from app.stock.storage.storage_manager import DataSyncManager
