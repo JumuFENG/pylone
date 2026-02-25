@@ -1,4 +1,3 @@
-from fastapi_users import schemas
 from typing import Optional
 from pydantic import Field, BaseModel
 

@@ -30,7 +30,6 @@ from app.stock.quotes import Quotes as qot
 from .models import (
     User, UserStocks, UserStrategy, UserOrders, UserFullOrders, UserUnknownDeals, UserArchivedDeals, UserStockBuy, UserStockSell,
     UserEarned, UserEarning, UserTrackNames, UserTrackDeals)
-from .schemas import UserRead, UserCreate, UserUpdate
 
 
 cfg = {'jwt_secret': 'JWT_SECRET_SHOULD_CHANGE_IN_PRODUCTION', 'jwt_lifetime_seconds': 2592000, 'cookie_secure': False}

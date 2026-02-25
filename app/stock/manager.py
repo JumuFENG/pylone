@@ -394,9 +394,13 @@ class AllStocks:
                 pdata = pdata.assign(lclose=lambda x: x['close'] - x['change_px'])
 
         if 'amount' not in pdata.columns:
-            pdata = pdata.assign(amount=lambda x: x['close'] * x['volume'])
+            pdata = pdata.assign(amount=lambda x: x['close'] * x['volume'] if x['close'] and x['volume'] else 0)
         if 'open' not in pdata.columns:
             pdata = pdata.assign(open=lambda x: x['lclose'])
+        if 'high' not in pdata.columns:
+            pdata = pdata.assign(high=lambda x: x['close'])
+        if 'low' not in pdata.columns:
+            pdata = pdata.assign(low=lambda x: x['close'])
         result = pdata[['code', 'name', 'close', 'high', 'low', 'open', 'change', 'volume', 'amount', 'change_px', 'lclose']].to_dict('records')
         return result
 
