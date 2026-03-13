@@ -233,6 +233,14 @@ const guang = {
     },
 
     async getSystemDate() {
+        if (guang.dserver) {
+            return this.fetchData(guang.dserver + 'api/tradingdates?len=2', {}, 10*60*60000, d => {
+                let today = this.getTodayDate('-');
+                let lastTradeDate = today == d[1] ? d[0] : d[1];
+
+                return {data: {systemDate: today, isTradeDay: today == d[1], lastTradeDate}, expireTime: new Date(new Date(this.getTodayDate('-').split('-')).getTime() + 30*60*60000)};
+            });
+        }
         return this.fetchData(guang.tradedayurl, {}, 10*60*60000, r => {
             let matchsd = r.match(/var systemDate_global\s*=\s*"([^"]+)"/);
             let matchtd = r.match(/var whetherTradeDate_global\s*=\s*(\w+)/);

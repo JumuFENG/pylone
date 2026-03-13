@@ -1028,7 +1028,7 @@ class StrategyBuySellBeforeEndView extends StrategyBaseView {
         view.appendChild(this.createDisableSellCheckbox());
         view.appendChild(this.createSellCountTypeSelector());
         if (this.strategy.selltype === undefined) {
-            this.sellCntSelector.value = 'xsingle';
+            this.sellCntSelector.value = 'x100';
         }
         return view;
     }

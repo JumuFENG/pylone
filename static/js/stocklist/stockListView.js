@@ -169,8 +169,8 @@ class LostAssignItem {
                 continue;
             }
             let guardPrice = parseFloat(stock.strategies.strategies[k].guardPrice);
-            if (stock.holdCount == 0) {
-                guardPrice += Math.abs(this.lostToAssign.value || 0);
+            if (guardPrice < 0 || stock.holdCount == 0) {
+                guardPrice -= Math.abs(this.lostToAssign.value || 0);
             } else {
                 guardPrice += Math.abs(this.lostToAssign.value || 0) / stock.holdCount;
             }
@@ -388,7 +388,7 @@ class StockListPanelPage extends RadioAnchorPage {
         if (ustocks.account(this.acc).stocks === undefined) {
             let stocks = await this.queryUserStocks();
             let deals = await this.queryUserDeals();
-            deals = deals.map( d => {d.type = d.tradeType, d.date = d.time; return d;});
+            deals = deals.map( d => {d.type = d.tradeType, d.date = d.time, d.code = d.code.toLowerCase(); return d;});
             for (const c in stocks) {
                 stocks[c].deals = deals.filter(d => d.code == c);
             }
