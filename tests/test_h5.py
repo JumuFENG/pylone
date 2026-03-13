@@ -5,6 +5,7 @@ import json
 import sys
 import os
 import numpy as np
+import h5py
 
 # 添加项目路径
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -30,6 +31,36 @@ class TestH5file(unittest.TestCase):
         for t in trans2.tolist():
             k = t[0].split(' ')[1]
             t_count2[k] = t_count2.get(k, 0) + 1
+
+    def test_remove_data_later_than(self):
+        """Verify that slicing with a boolean mask works after resizing."""
+        import tempfile
+        # create temporary h5 file and populate with simple kline data
+        tmp = tempfile.NamedTemporaryFile(suffix='.h5', delete=False)
+        tmp_path = tmp.name
+        tmp.close()
+
+        # override path resolution to use our temp file
+        with patch.object(kls, 'h5_saved_path', return_value=tmp_path):
+            # prepare a small dataset where time values are simple integers
+            # build a numpy dtype from the saved_dtype dict
+            dtype = [(k, v) for k, v in kls.saved_dtype.items()]
+            arr = np.zeros(5, dtype=dtype)
+            arr['time'] = np.arange(1, 6)
+            with h5py.File(tmp_path, 'a') as f:
+                grp = f.create_group('data')
+                grp.create_dataset('TEST', data=arr, maxshape=(None,))
+
+            # patch the date_converter to simply convert string to int
+            with patch.object(kls.date_converter, 'time_to_int', lambda s: int(s)):
+                # remove entries later than '3', i.e. keep 1,2,3
+                kls.remove_data_later_than('TEST', 101, date_str='3')
+
+            # verify dataset now only contains expected rows
+            with h5py.File(tmp_path, 'r') as f:
+                result = f['data']['TEST'][:]
+            self.assertTrue(np.array_equal(result['time'], np.array([1, 2, 3])))
+        os.remove(tmp_path)
 
 
 if __name__ == '__main__':

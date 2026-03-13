@@ -135,7 +135,9 @@ def recognize_image(img):
     itext = img_to_text(img)
 
     if itext is None:
-        ollama_instance = ollama(Config.client_config().get('ollama_api_key', None))
+        ol_key = Config.client_config().get('ollama_api_key', None)
+        ol_mdl = Config.client_config().get('ollama_model', 'qwen3.5:397b-cloud')
+        ollama_instance = ollama(api_key=ol_key, model=ol_mdl)
         if isinstance(img, bytes):
             img = base64.b64encode(img).decode('utf-8')
         itext = ollama_instance.img_to_text(img)

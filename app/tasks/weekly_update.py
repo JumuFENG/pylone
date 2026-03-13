@@ -45,7 +45,6 @@ class WeeklyUpdater():
         await AllStocks.update_klines_by_code(stocks, 'w')
         await cls.update_holidays()
         await cls.update_quit_stocks()
-        await cls.sync_storage_sqlite_to_h5()
         logger.info('Weekly update finished.')
 
     @classmethod

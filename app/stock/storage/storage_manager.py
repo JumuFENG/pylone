@@ -57,7 +57,7 @@ else:
                 # 从H5读取数据
                 if sqlite_latest:
                     # 读取比SQLite更新的数据
-                    h5_data = self.h5_kline.read_kline_data(fcode, kline_type, 0)
+                    h5_data = await self.h5_kline.read_kline_data(fcode, kline_type, 0)
                     if h5_data is None:
                         return 0
 
@@ -74,7 +74,7 @@ else:
                         return saved_count
                 else:
                     # SQLite中没有数据，读取最新的limit条
-                    h5_data = self.h5_kline.read_kline_data(fcode, kline_type, limit)
+                    h5_data = await self.h5_kline.read_kline_data(fcode, kline_type, limit)
                     if h5_data is None:
                         return 0
 
@@ -105,7 +105,7 @@ else:
                 sqlite_latest = await self.sqlite_fflow.get_latest_time(fcode)
 
                 # 从H5读取数据
-                h5_data = self.h5_fflow.read_fflow(fcode)
+                h5_data = await self.h5_fflow.read_fflow(fcode)
                 if not h5_data:
                     return 0
 
@@ -398,6 +398,14 @@ else:
                 results[c].update({'transactions': cnt})
 
             return results
+
+        async def remove_h5_data_later_than(self, fcode: str, date_str: str):
+            """删除H5中指定日期之后的数据"""
+            klt = [15, 101, 102]
+            for kltype in klt:
+                self.h5_kline.remove_data_later_than(fcode, kltype, date_str)
+            self.h5_fflow.remove_data_later_than(fcode, date_str=date_str)
+            self.h5_trans.remove_data_later_than(fcode, date_str=date_str)
 
         async def compact_sqlite(self):
             await self.sqlite_kline.vacuum()

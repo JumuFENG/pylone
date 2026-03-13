@@ -16,7 +16,7 @@ from app.db import (
     upsert_one, upsert_many, insert_many, delete_records)
 from . import dynamic_cache, lru_cache
 from .date import TradingDate
-from .storage.sqlite import kls, fls
+from .storage.h5 import KLineStorage as kls, FflowStorage as fls
 from .models import (
     MdlAllStock, MdlStockList, MdlStockShare,MdlStockBk, MdlStockBkMap, MdlStockChanges, MdlStockBkChanges, MdlStockBkClsChanges,
     MdlDayZtStocks, MdlDayDtStocks, MdlDayZtConcepts)

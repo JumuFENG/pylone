@@ -1,11 +1,13 @@
 import sys
 import json
 import gzip
+import requests
 import emxg
 import stockrt as srt
 from typing import List, Tuple
 from traceback import format_exc
 from datetime import datetime
+from tenacity import retry, stop_after_attempt, retry_if_exception_type, wait_exponential
 from stockrt.sources.eastmoney import Em
 from app.hu import classproperty, to_cls_secucode, time_stamp
 from app.hu.network import Network as net
@@ -19,7 +21,7 @@ from .history import (
     StockList)
 from app.selectors import SelectorsFactory as sfac
 from .date import TradingDate
-from .storage.sqlite import tss
+from .storage.h5 import TransactionStorage as tss
 
 
 class AllStocks:
@@ -119,7 +121,7 @@ class AllStocks:
             fixlens[l].append(c)
         if not fixlens:
             return
-        if 1 in fixlens and len(fixlens[1]) > 100:
+        if 1 in fixlens and len(fixlens[1]) > 100 and kltype == 'd':
             logger.warning('too many stocks to update for 1 day, please call update_kline_data("d") first!')
             return
 
@@ -194,10 +196,14 @@ class AllStocks:
 
     @classmethod
     async def update_stock_fflow(cls):
-        rows = await query_values(cls.db)
-        for r in rows:
-            if r.code.startswith(('sh', 'sz', 'bj')) and r.typekind in ('ABStock', 'BJStock') and (r.setup_date is None or r.setup_date <= TradingDate.max_trading_date()):
-                await fhis.update_fflow(r.code)
+        try:
+            rows = await query_values(cls.db)
+            for r in rows:
+                if r.code.startswith(('sh', 'sz', 'bj')) and r.typekind in ('ABStock', 'BJStock') and (r.setup_date is None or r.setup_date <= TradingDate.max_trading_date()):
+                    await fhis.update_fflow(r.code)
+        except Exception as e:
+            logger.error(f'Error updating stock fflow: {e}')
+            logger.debug(format_exc())
 
     @classmethod
     async def update_stock_transactions(cls):
@@ -209,6 +215,10 @@ class AllStocks:
         await cls.update_transactions_by_code(stocks)
 
     @classmethod
+    @retry(
+        wait=wait_exponential(multiplier=1, min=1, max=60),
+        stop=stop_after_attempt(5),
+        retry=retry_if_exception_type((requests.Timeout, requests.HTTPError, requests.ConnectionError)))
     async def update_transactions_by_code(cls, stocks: list = None):
         # 使用trans_adapter获取最新交易时间
         stocks_with_time = []
@@ -394,7 +404,7 @@ class AllStocks:
                 pdata = pdata.assign(lclose=lambda x: x['close'] - x['change_px'])
 
         if 'amount' not in pdata.columns:
-            pdata = pdata.assign(amount=lambda x: x['close'] * x['volume'] if x['close'] and x['volume'] else 0)
+            pdata = pdata.assign(amount=lambda x: x['close'] * x['volume'] if x['close'] is not None and x['volume'] is not None else 0)
         if 'open' not in pdata.columns:
             pdata = pdata.assign(open=lambda x: x['lclose'])
         if 'high' not in pdata.columns:

@@ -219,8 +219,10 @@ class H5Storage:
 
         # 处理数据格式：如果是list-of-dict，转换为numpy数组
         if isinstance(ds_data, list):
-            dtypes = cls.saved_dtype.copy()
-            dtypes.update(cls.restore_dtype)
+            dtypes = cls.restore_dtype.copy()
+            for col in cls.saved_dtype.keys():
+                if col not in dtypes:
+                    dtypes[col] = 'float64'
             ds_data = cls.list_of_dicts_to_numpy(ds_data, dtypes)
         elif ds_data is None:
             return
@@ -257,7 +259,8 @@ class H5Storage:
             new_size = len(newer_data) if new_first_time > last_saved_time else len(newer_data) - last_time_count
             if new_size > 0:
                 dset.resize((len(dset) + new_size,))
-            dset[-len(newer_data):] = newer_data
+            if len(newer_data) > 0:
+                dset[-len(newer_data):] = newer_data
 
     @classmethod
     @lru_cache(maxsize=2000)
@@ -309,6 +312,10 @@ class H5Storage:
         return cls._min_max_date(False, fcode, kline_type)
 
     @classmethod
+    async def get_latest_time(cls, fcode: str, kline_type: int=101):
+        return cls.max_date(fcode, kline_type)
+
+    @classmethod
     def delete_dataset(cls, fcode: str, kline_type: int=101):
         """删除K线数据"""
         file_path = cls.h5_saved_path(fcode, kline_type)
@@ -318,6 +325,30 @@ class H5Storage:
             group = cls.h5_saved_group(kline_type)
             if group in f and fcode in f[group]:
                 del f[group][fcode]
+
+    @classmethod
+    def remove_data_later_than(cls, fcode: str, kline_type: int=101, date_str: str=''):
+        """删除指定日期之后的数据"""
+        file_path = cls.h5_saved_path(fcode, kline_type)
+        if not os.path.isfile(file_path):
+            return
+        group = cls.h5_saved_group(kline_type)
+        with h5py.File(file_path, 'a') as f:
+            if group not in f or fcode not in f[group]:
+                return
+            dset = f[group][fcode]
+            if len(dset) == 0:
+                return
+            date_int = cls.date_converter.time_to_int(date_str)
+            valid_mask = dset['time'] <= date_int
+            if valid_mask.all():
+                return
+            elif not valid_mask.any():
+                del f[group][fcode]
+            else:
+                filtered = dset[valid_mask]
+                dset.resize((filtered.shape[0],))
+                dset[:] = filtered
 
 class KLineStorage(H5Storage):
     saved_dtype = {
@@ -389,7 +420,7 @@ class KLineStorage(H5Storage):
         return merged
 
     @classmethod
-    def read_kline_data(cls, fcode: str, kline_type: Union[int, str]=101, length: int=0):
+    async def read_kline_data(cls, fcode: str, kline_type: Union[int, str]=101, length: int=0):
         kline_type = srt.to_int_kltype(kline_type)
         if kline_type not in cls.saved_kline_types:
             if kline_type % 15 == 0:
@@ -405,6 +436,11 @@ class KLineStorage(H5Storage):
             return cls.numpy_to_list_of_dicts(extended_klines)
         klines = cls.read_saved_data(fcode, length, kline_type)
         return cls.numpy_to_list_of_dicts(klines)
+
+    @classmethod
+    async def save_kline_data(cls, fcode: str, klines: List[Dict[str, Any]], kline_type: int=101):
+        cls.save_dataset(fcode, klines, kline_type)
+
 
 class KLineTsStorage(KLineStorage):
     @classmethod
@@ -444,7 +480,7 @@ class FflowStorage(H5Storage):
         return f"{histroy_dir}/fflow.h5"
 
     @classmethod
-    def save_fflow(cls, code, fflow):
+    async def save_fflow(cls, code, fflow):
         dtypes = [
             ('time', 'U10'), ('main', 'int64'), ('small', 'int64'), ('middle', 'int64'), ('big', 'int64'), ('super', 'int64'),
             ('mainp', 'float'), ('smallp', 'float'), ('middlep', 'float'), ('bigp', 'float'), ('superp', 'float')]
@@ -457,7 +493,7 @@ class FflowStorage(H5Storage):
         cls.save_dataset(code, values)
 
     @classmethod
-    def read_fflow(cls, code, date=None, date1=None):
+    async def read_fflow(cls, code, date=None, date1=None):
         fflow = cls.read_saved_data(code)
         if fflow is None:
             return []
@@ -516,3 +552,7 @@ class TransactionStorage(H5Storage):
         if limit is not None:
             data = data[-limit:]
         return cls.numpy_to_list_of_dicts(data)
+
+    @classmethod
+    async def save_transaction(cls, fcode: str, transactions: List[Dict[str, Any]]):
+        cls.save_dataset(fcode, transactions)

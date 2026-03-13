@@ -130,7 +130,7 @@ logging.basicConfig(
     force=True
 )
 
-logger : logging.Logger = logging.getLogger(Config.app_name)
+logger : logging.Logger = logging.getLogger(Config.client_config().get("app_name", "pyswee"))
 
 def redirect_std_logs():
     class StdoutLogger:

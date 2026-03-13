@@ -278,7 +278,12 @@ async def test_sync():
         print(f"测试失败: {e}")
         return False
 
+async def test_remove_h5():
+    sync_mgr = DataSyncManager()
+    # await sync_mgr.remove_h5_data_later_than('sh000001', '2026-02-05')
+    await sync_mgr.sqlite_to_h5_klines('sh000001', 101, 100)
+
 
 if __name__ == "__main__":
     # 检查是否是测试模式
-    asyncio.run(test_sync())
+    asyncio.run(test_remove_h5())

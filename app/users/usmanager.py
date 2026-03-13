@@ -905,3 +905,36 @@ class UserStockManager():
             ds.append({'code': c, 'time': d, 'typebs': tp, 'sid': sid, 'price': pr, 'portion': ptn, 'fee': fee})
         track['deals'] = ds
         return track
+
+    @classmethod
+    async def fix_archived_null_portion(cls):
+        recs = await query_values(UserArchivedDeals, None, UserArchivedDeals.portion == None)
+        for r in recs:
+            other_recs = await query_values(UserArchivedDeals, None, UserArchivedDeals.user_id == r.user_id, UserArchivedDeals.code == r.code, UserArchivedDeals.typebs == r.typebs, UserArchivedDeals.sid == r.sid)
+            if len(other_recs) != 2:
+                logger.warning('fix_archived_null_portion find multiple records for %s %s %s %s, skip', r.user_id, r.code, r.typebs, r.sid)
+                continue
+            other = other_recs[0] if other_recs[0].portion is not None else other_recs[1]
+            if other.portion is None:
+                logger.warning('fix_archived_null_portion both records have null portion for %s %s %s %s, update', r.user_id, r.code, r.typebs, r.sid)
+                continue
+            await delete_records(UserArchivedDeals, UserArchivedDeals.user_id == r.user_id, UserArchivedDeals.code == r.code, UserArchivedDeals.typebs == r.typebs, UserArchivedDeals.sid == r.sid, UserArchivedDeals.time == r.time, UserArchivedDeals.portion == None)
+            new_rec = {
+                'user_id': other.user_id,
+                'code': other.code,
+                'typebs': other.typebs,
+                'sid': other.sid,
+                'time': other.time,
+            }
+            if other.time != r.time and len(r.time) > len(other.time):
+                new_rec['time'] = r.time
+            if other.fee != r.fee and r.fee is not None:
+                new_rec['fee'] = r.fee
+            if other.feeYh != r.feeYh and r.feeYh is not None:
+                new_rec['feeYh'] = r.feeYh
+            if other.feeGh != r.feeGh and r.feeGh is not None:
+                new_rec['feeGh'] = r.feeGh
+            if other.price != r.price and r.price is not None:
+                new_rec['price'] = r.price
+
+            await upsert_one(UserArchivedDeals, new_rec, ['user_id', 'code', 'typebs', 'sid'])
