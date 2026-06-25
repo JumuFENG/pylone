@@ -506,6 +506,330 @@ GlobalManager.prototype.hash = function(t){
 }
 
 
+/**
+ * TabIframeManager - 在容器中管理多个iframe标签页
+ * @param {HTMLElement} container - 承载Tab和iframe的容器元素
+ * @param {Object} options - 配置选项
+ * @param {string} options.tabActiveClass - Tab激活时的CSS类名，默认 'active'
+ * @param {string} options.iframeActiveClass - iframe容器激活时的CSS类名，默认 'active'
+ * @param {boolean} options.lazyLoad - 是否懒加载iframe（点击Tab时才加载），默认 true
+ */
+class TabIframeManager {
+    constructor(container, options = {}) {
+        if (!container || !(container instanceof HTMLElement)) {
+            throw new Error('TabIframeManager: 必须传入有效的HTMLElement作为容器');
+        }
+
+        this.container = container;
+        this.options = Object.assign({
+            tabActiveClass: 'active',
+            iframeActiveClass: 'active',
+            lazyLoad: true
+        }, options);
+
+        this.tabs = [];           // 存储所有tab信息 { name, url, tabEl, iframeEl, loaded }
+        this.currentIndex = -1;   // 当前激活的tab索引
+
+        // 构建DOM结构
+        this._buildStructure();
+    }
+
+    /**
+     * 构建容器内的DOM结构：Tab导航栏 + iframe展示区
+     */
+    _buildStructure() {
+        // 清空容器
+        this.container.innerHTML = '';
+
+        // 创建Tab导航栏
+        this.tabNav = document.createElement('div');
+        this.tabNav.className = 'tab-iframe-nav';
+        this.tabNav.style.cssText = `
+            display: flex;
+            border-bottom: 2px solid #e8e8e8;
+            background: #fafafa;
+            padding: 0 8px;
+            overflow-x: auto;
+            flex-shrink: 0;
+        `;
+
+        // 创建iframe展示容器
+        this.iframeContainer = document.createElement('div');
+        this.iframeContainer.className = 'tab-iframe-content';
+        this.iframeContainer.style.cssText = `
+            flex: 1;
+            position: relative;
+            background: #ffffff;
+        `;
+
+        // 组装到容器
+        const wrapper = document.createElement('div');
+        wrapper.style.cssText = `
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+            width: 100%;
+        `;
+        wrapper.appendChild(this.tabNav);
+        wrapper.appendChild(this.iframeContainer);
+        this.container.appendChild(wrapper);
+
+        if (!this.container.style.width) {
+            this.container.style.width = '480px';
+        }
+        if (!this.container.style.minHeight) {
+            this.container.style.minHeight = '600px';
+        }
+    }
+
+    /**
+     * 添加一个新的iframe标签页
+     * @param {string} name - Tab显示的名称
+     * @param {string} url - iframe要加载的URL
+     * @param {Object} iframeAttrs - 额外的iframe属性（如 sandbox, allow 等）
+     * @returns {number} 新添加的tab索引
+     */
+    addFrame(name, url, iframeAttrs = {}) {
+        if (!name || !url) {
+            throw new Error('addFrame: name和url参数都是必需的');
+        }
+
+        const index = this.tabs.length;
+
+        // 创建Tab按钮
+        const tabEl = document.createElement('button');
+        tabEl.className = 'tab-iframe-btn';
+        tabEl.textContent = name;
+        tabEl.dataset.index = index;
+        tabEl.style.cssText = `
+            padding: 10px 20px;
+            border: none;
+            background: transparent;
+            cursor: pointer;
+            font-size: 14px;
+            color: #666;
+            position: relative;
+            white-space: nowrap;
+            transition: all 0.3s;
+            border-bottom: 3px solid transparent;
+            margin: 0 2px;
+            outline: none;
+        `;
+        tabEl.addEventListener('mouseenter', () => {
+            if (this.currentIndex !== index) {
+                tabEl.style.color = '#333';
+            }
+        });
+        tabEl.addEventListener('mouseleave', () => {
+            if (this.currentIndex !== index) {
+                tabEl.style.color = '#666';
+            }
+        });
+        tabEl.addEventListener('click', () => {
+            this.switchTo(index);
+        });
+
+        // 创建iframe容器（用于包裹iframe，便于显示/隐藏）
+        const iframeWrapper = document.createElement('div');
+        iframeWrapper.className = 'tab-iframe-wrapper';
+        iframeWrapper.dataset.index = index;
+        iframeWrapper.style.cssText = `
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: none;
+            background: #fff;
+        `;
+
+        // 创建iframe元素（但不立即设置src，实现懒加载）
+        const iframeEl = document.createElement('iframe');
+        iframeEl.className = 'tab-iframe';
+        // 默认属性
+        iframeEl.style.cssText = `
+            width: 100%;
+            height: 100%;
+            border: none;
+        `;
+        // 用户自定义属性
+        Object.keys(iframeAttrs).forEach(key => {
+            iframeEl.setAttribute(key, iframeAttrs[key]);
+        });
+        // 如果是懒加载模式，先不设置src
+        if (!this.options.lazyLoad) {
+            iframeEl.src = url;
+        }
+
+        iframeWrapper.appendChild(iframeEl);
+        this.iframeContainer.appendChild(iframeWrapper);
+
+        // 存入tabs数组
+        this.tabs.push({
+            name,
+            url,
+            tabEl,
+            iframeWrapper,
+            iframeEl,
+            loaded: false
+        });
+
+        // 将Tab按钮插入导航栏
+        this.tabNav.appendChild(tabEl);
+
+        // 如果是第一个Tab，自动激活
+        if (this.tabs.length === 1) {
+            this.switchTo(0);
+        }
+
+        return index;
+    }
+
+    /**
+     * 切换到指定索引的Tab
+     * @param {number} index - Tab索引
+     */
+    switchTo(index) {
+        if (index < 0 || index >= this.tabs.length) {
+            throw new Error(`switchTo: 索引 ${index} 超出范围 (0-${this.tabs.length-1})`);
+        }
+
+        if (this.currentIndex === index) {
+            return; // 已经是当前Tab
+        }
+
+        const prevIndex = this.currentIndex;
+        this.currentIndex = index;
+
+        // 更新Tab按钮样式
+        this.tabs.forEach((tab, i) => {
+            const isActive = (i === index);
+            tab.tabEl.classList.toggle(this.options.tabActiveClass, isActive);
+            tab.tabEl.style.color = isActive ? '#1890ff' : '#666';
+            tab.tabEl.style.borderBottomColor = isActive ? '#1890ff' : 'transparent';
+            tab.tabEl.style.fontWeight = isActive ? '600' : 'normal';
+        });
+
+        // 更新iframe显示
+        this.tabs.forEach((tab, i) => {
+            const isActive = (i === index);
+            tab.iframeWrapper.style.display = isActive ? 'block' : 'none';
+            tab.iframeWrapper.classList.toggle(this.options.iframeActiveClass, isActive);
+        });
+
+        // 懒加载：切换时加载iframe
+        const currentTab = this.tabs[index];
+        if (this.options.lazyLoad && !currentTab.loaded) {
+            currentTab.iframeEl.src = currentTab.url;
+            currentTab.loaded = true;
+        }
+
+        // 触发切换事件
+        this._fireEvent('switch', {
+            index: index,
+            previousIndex: prevIndex,
+            tab: currentTab,
+            name: currentTab.name,
+            url: currentTab.url
+        });
+    }
+
+    /**
+     * 移除指定索引的Tab
+     * @param {number} index - Tab索引
+     */
+    removeFrame(index) {
+        if (index < 0 || index >= this.tabs.length) {
+            throw new Error(`removeFrame: 索引 ${index} 超出范围`);
+        }
+
+        const tab = this.tabs[index];
+        
+        // 移除DOM元素
+        tab.tabEl.remove();
+        tab.iframeWrapper.remove();
+
+        // 从数组中移除
+        this.tabs.splice(index, 1);
+
+        // 如果移除的是当前激活的Tab
+        if (this.currentIndex === index) {
+            if (this.tabs.length === 0) {
+                this.currentIndex = -1;
+            } else {
+                // 切换到前一个Tab（如果存在），否则切换到下一个
+                const newIndex = Math.min(index, this.tabs.length - 1);
+                this.switchTo(newIndex);
+            }
+        } else if (this.currentIndex > index) {
+            // 如果移除的Tab在当前激活Tab之前，索引需要减1
+            this.currentIndex--;
+        }
+
+        // 触发移除事件
+        this._fireEvent('remove', {
+            index: index,
+            tab: tab
+        });
+    }
+
+    /**
+     * 获取当前激活的Tab信息
+     * @returns {Object|null} 当前Tab对象
+     */
+    getCurrentTab() {
+        if (this.currentIndex >= 0 && this.currentIndex < this.tabs.length) {
+            return this.tabs[this.currentIndex];
+        }
+        return null;
+    }
+
+    /**
+     * 获取所有Tab信息
+     * @returns {Array} Tab数组
+     */
+    getAllTabs() {
+        return this.tabs.slice(); // 返回副本
+    }
+
+    /**
+     * 重新加载当前iframe
+     */
+    reloadCurrent() {
+        const current = this.getCurrentTab();
+        if (current) {
+            current.iframeEl.src = current.iframeEl.src;
+            this._fireEvent('reload', {
+                tab: current,
+                url: current.url
+            });
+        }
+    }
+
+    /**
+     * 销毁实例，清理DOM和事件
+     */
+    destroy() {
+        // 清空容器
+        this.container.innerHTML = '';
+        this.tabs = [];
+        this.currentIndex = -1;
+        // 解绑所有事件（这里没有额外的事件监听需要解绑）
+        this._fireEvent('destroy', {});
+    }
+
+    /**
+     * 内部事件触发器
+     */
+    _fireEvent(eventName, detail) {
+        const customEvent = new CustomEvent(`tabiframe:${eventName}`, {
+            detail: detail,
+            bubbles: true
+        });
+        this.container.dispatchEvent(customEvent);
+    }
+}
+
 class DailyHome {
     constructor() {
     }
@@ -527,6 +851,7 @@ class DailyHome {
                 this.updateBanner();
                 if (emjyBack.is_trading_day) {
                     this.updateEmotions();
+                    // this.updateMainFundFlow();
                     this.updatePlateList();
                     emjyBack.updateZdfRank();
                     emjyBack.getStockChanges();
@@ -584,19 +909,13 @@ class DailyHome {
 
         const emochart = document.createElement('div');
         emochart.style.width = '450px';
-        this.emotion_zdgraph = document.createElement('div');
-        this.emotion_zdgraph.style.minHeight = '270px';
-        this.emotion_zdgraph.style.height = '300px';
-        emochart.appendChild(this.emotion_zdgraph);
-
-        this.shfflow_chart = document.createElement('div');
-        this.shfflow_chart.style.minHeight = '200px';
-        this.shfflow_chart.style.height = '250px';
-        emochart.appendChild(this.shfflow_chart);
+        emochart.style.minHeight = '550px';
         this.headerArea.appendChild(emochart);
+        this.frames = new TabIframeManager(emochart);
 
         this.updateBanner();
         this.updateEmotions();
+        // this.updateMainFundFlow();
         this.updatePlateList();
         emjyBack.updateZdfRank();
         feng.getStockBasics('sh000001').then(() => {
@@ -649,6 +968,9 @@ class DailyHome {
         feng.getZdFenbu().then(emo => {
             this.showEmotion(emo);
         });
+    }
+
+    updateMainFundFlow() {
         var fUrl1 = guang.buildUrl('fwd/empush2qt/', 'https://push2.eastmoney.com/api/qt/', 'stock/fflow/kline/get?lmt=0&klt=1&fields1=f1,f2,f3,f7&fields2=f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61,f62,f63,f64,f65&ut=b2884a393a59ad64002292a3e90d46a5&secid=1.000001&secid2=0.399001');
         fetch(fUrl1).then(r=>r.json()).then(emo => {
             this.showMainFundFlow(emo);
@@ -666,9 +988,30 @@ class DailyHome {
 
     showEmotion(emotionobj) {
         if (!this.emotionBlock) {
-            this.emotionBlock = new EmotionBlock(this.emotion_zdgraph, this.emotion_balance);
+            this.emotionBlock = new EmotionBlock(this.emotion_zdgraph);
         }
         this.emotionBlock.updateEmotionContent(emotionobj);
+        this.showEmotionBalance(emotionobj);
+    }
+
+    showEmotionBalance(emoinfo) {
+        var bcolor = '#52c253';
+        if (emoinfo.shsz_balance_change_px && emoinfo.shsz_balance_change_px.includes('+')) {
+            bcolor = '#de0422';
+        }
+        this.emotion_balance.innerHTML = `<br>
+        <div>总成交</div><div style='color: ${bcolor}; font-size: 18px'>${emoinfo.shsz_balance}</div>
+        <div>较上日</div><div style='color: ${bcolor}; font-size: 18px'>${emoinfo.shsz_balance_change_px}</div>
+        <br>
+        <div>涨停数</div><div style='color: #de0422; font-size: 18px'>${emoinfo.up_ratio_num}</div>
+        <div>开板数</div><div style='color: #de0422; font-size: 18px'>${emoinfo.up_open_num}</div>
+        <div>封板率</div><div style='color: #de0422; font-size: 18px'>${emoinfo.up_ratio}</div>
+        `;
+        if (emjyBack.shMainFundFlow && emjyBack.shMainFundFlow.length > 0) {
+            var mf = emjyBack.shMainFundFlow[emjyBack.shMainFundFlow.length - 1];
+            bcolor = mf[1] > 0 ? '#de0422' : '#52c253';
+            this.emotion_balance.innerHTML += `<br><div>净流入</div><div style='color: ${bcolor}; font-size: 18px'>${emjyBack.formatMoney(mf[1])}</div>`;
+        }
     }
 
     showMainFundFlow(flow) {
@@ -2040,13 +2383,15 @@ class StockMarketStatsPanel {
 
 
 class EmotionBlock {
-    constructor(chart_container, info_block) {
+    constructor(chart_container) {
         this.chart_container = chart_container;
-        this.info_block = info_block;
     }
 
     updateEmotionContent(emoinfo) {
         if (!this.emotionChart) {
+            if (!this.chart_container) {
+                return;
+            }
             this.emotionChart = echarts.init(this.chart_container);
         }
 
@@ -2169,24 +2514,6 @@ class EmotionBlock {
         };
 
         this.emotionChart.setOption(option);
-
-        var bcolor = '#52c253';
-        if (emoinfo.shsz_balance_change_px && emoinfo.shsz_balance_change_px.includes('+')) {
-            bcolor = '#de0422';
-        }
-        this.info_block.innerHTML = `<br>
-        <div>总成交</div><div style='color: ${bcolor}; font-size: 18px'>${emoinfo.shsz_balance}</div>
-        <div>较上日</div><div style='color: ${bcolor}; font-size: 18px'>${emoinfo.shsz_balance_change_px}</div>
-        <br>
-        <div>涨停数</div><div style='color: #de0422; font-size: 18px'>${emoinfo.up_ratio_num}</div>
-        <div>开板数</div><div style='color: #de0422; font-size: 18px'>${emoinfo.up_open_num}</div>
-        <div>封板率</div><div style='color: #de0422; font-size: 18px'>${emoinfo.up_ratio}</div>
-        `;
-        if (emjyBack.shMainFundFlow && emjyBack.shMainFundFlow.length > 0) {
-            var mf = emjyBack.shMainFundFlow[emjyBack.shMainFundFlow.length - 1];
-            bcolor = mf[1] > 0 ? '#de0422' : '#52c253';
-            this.info_block.innerHTML += `<br><div>净流入</div><div style='color: ${bcolor}; font-size: 18px'>${emjyBack.formatMoney(mf[1])}</div>`;
-        }
     }
 }
 
@@ -4320,5 +4647,9 @@ window.onload = e => {
             emjyBack.last_traded_date = lastTradeDate;
             emjyBack.home = new DailyHome();
             emjyBack.home.initUi();
+            emjyBack.home.frames.addFrame('资金流向', 'https://emdata.eastmoney.com/appdc/zjlx/index.html');
+            emjyBack.home.frames.addFrame('涨跌分布', 'https://emrnweb.eastmoney.com/nxfxb/home');
+            emjyBack.home.frames.addFrame('涨停', 'https://emrnweb.eastmoney.com/ztzt/home');
+            emjyBack.home.frames.addFrame('涨停复盘', 'https://emdata.eastmoney.com/appdc/fpl/index.html');
         });
 };
