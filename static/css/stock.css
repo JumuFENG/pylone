@@ -87,3 +87,10 @@ hr {
     margin-top: 2px;
     transition: opacity 0.3s;
 }
+
+@media (max-width: 768px) {
+    .prc_calc_box {
+        top: 50px;
+        left: 0;
+    }
+}

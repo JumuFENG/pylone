@@ -4647,9 +4647,9 @@ window.onload = e => {
             emjyBack.last_traded_date = lastTradeDate;
             emjyBack.home = new DailyHome();
             emjyBack.home.initUi();
-            emjyBack.home.frames.addFrame('资金流向', 'https://emdata.eastmoney.com/appdc/zjlx/index.html');
-            emjyBack.home.frames.addFrame('涨跌分布', 'https://emrnweb.eastmoney.com/nxfxb/home');
+            emjyBack.home.frames.addFrame('资金流', 'https://emdata.eastmoney.com/appdc/zjlx/index.html');
+            emjyBack.home.frames.addFrame('涨跌数', 'https://emrnweb.eastmoney.com/nxfxb/home');
             emjyBack.home.frames.addFrame('涨停', 'https://emrnweb.eastmoney.com/ztzt/home');
-            emjyBack.home.frames.addFrame('涨停复盘', 'https://emdata.eastmoney.com/appdc/fpl/index.html');
+            emjyBack.home.frames.addFrame('复盘', 'https://emdata.eastmoney.com/appdc/fpl/index.html');
         });
 };

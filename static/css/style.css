@@ -54,6 +54,42 @@ h1, h2 {
 
 .form-group {
     margin-bottom: 20px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.form-group label {
+    flex: 0 0 100px;
+    margin-bottom: 0;
+    white-space: nowrap;
+}
+
+.form-group input,
+.form-group select {
+    flex: 1;
+    min-width: 0;
+    max-width: 200px;
+}
+
+.form-group-inline {
+    margin-bottom: 20px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.form-group-inline label {
+    flex: 0 0 80px;
+    margin-bottom: 0;
+    white-space: nowrap;
+}
+
+.form-group-inline input,
+.form-group-inline select,
+.form-group-inline textarea {
+    flex: 1;
+    min-width: 0;
 }
 
 label {
@@ -72,6 +108,7 @@ label {
 input[type="email"],
 input[type="password"],
 input[type="text"],
+textarea,
 select {
     border: 2px solid #e0e0e0;
     border-radius: 5px;
@@ -82,9 +119,16 @@ select {
 
 input[type="email"],
 input[type="password"],
-input[type="text"] {
+input[type="text"],
+textarea {
     width: 100%;
     padding: 5px 12px;
+}
+
+textarea {
+    resize: vertical;
+    min-height: 60px;
+    font-family: monospace;
 }
 
 select {
@@ -409,4 +453,82 @@ tr:hover {
 
 .green {
     color: green;
+}
+
+@media (max-width: 768px) {
+    body {
+        align-items: flex-start;
+        padding: 4px;
+        overflow-x: hidden;
+    }
+
+    .container.center {
+        max-width: 100%;
+        padding: 20px 14px;
+    }
+
+    .container.center-wide {
+        max-width: 100%;
+        padding: 6px 14px;
+    }
+
+    h1, h2 {
+        margin-bottom: 16px;
+    }
+
+    .form-group,
+    .form-group-inline {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 4px;
+    }
+
+    .form-group label,
+    .form-group-inline label {
+        flex: none;
+    }
+
+    .form-group input,
+    .form-group select,
+    .form-group-inline input,
+    .form-group-inline select,
+    .form-group-inline textarea {
+        max-width: 100%;
+    }
+
+    .nav {
+        flex-wrap: wrap;
+        gap: 6px;
+    }
+
+    .nav-links {
+        display: flex;
+        flex-wrap: wrap;
+    }
+
+    .nav-links a {
+        margin-left: 0;
+        margin-right: 12px;
+    }
+
+    table {
+        font-size: 13px;
+        display: block;
+        overflow-x: auto;
+        white-space: nowrap;
+    }
+
+    /* hover-only actions are unreachable on touch */
+    .hover-actions,
+    #userTableBody tr .row-actions {
+        opacity: 1;
+        visibility: visible;
+        display: block;
+        position: static;
+        transform: none;
+    }
+
+    .user-info {
+        padding: 12px;
+    }
 }

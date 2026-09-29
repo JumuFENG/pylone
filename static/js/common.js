@@ -3,7 +3,8 @@ const common = {
         console.log(...args);
     },
     public_links() {
-        return `<a href="/html/watching.html" class="${location.pathname === '/html/watching.html' ? 'active' : '' }">盯盘</a>`;
+        return `<a href="/html/watching.html" class="${location.pathname === '/html/watching.html' ? 'active' : '' }">盯盘</a>
+            <a href="/html/backtest.html" class="${location.pathname === '/html/backtest.html' ? 'active' : '' }">回测</a>`;
     },
     normal_user_links() {
         return `
@@ -91,6 +92,7 @@ const common = {
                 this.root.innerHTML = `
                     <div style="display: flex;flex-wrap: wrap;justify-content: space-between;">
                         <span style="font-weight: bold;font-size: 1.1em">简易计算器</span>
+                        <span id="prc_close" style="cursor: pointer;line-height: 1;margin-left: auto;">✕</span>
                         <label style="width: 100%">参考价: ${this.price} 
                             <input id="prc_input" style="width: 55px;" value="${this.price}">
                             <input id="pct_input" style="width: 35px;"><span>% = </span><span id="prc_calced"></span></label>
@@ -104,6 +106,10 @@ const common = {
                 }
                 this.root.querySelector('#prc_input').oninput = () => {
                     this.onInputChanged();
+                }
+                this.root.querySelector('#prc_close').onclick = () => {
+                    this.root.remove();
+                    this.root = null;
                 }
             }
             target.appendChild(this.root);

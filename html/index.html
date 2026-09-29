@@ -50,15 +50,27 @@
         .link-grid a:hover::before {
             opacity: 1;
         }
+
+        #rt_box {
+            position: relative;
+            top: -18px;
+        }
+
+        @media (max-width: 768px) {
+            #rt_box {
+                top: 0;
+                height: 30px;
+            }
+        }
     </style>
 </head>
 <body style="min-height: 100vh;">
     <div class="container" style="width: 90%; padding: 40px;">
         <h1>phoniun交易系统</h1>
-        <div style="position: relative;">
+        <div id="rt_box">
             <div style="position: absolute; right: 0px; bottom: 10px;">
                 <a id="lk-login" href="/html/login.html" style="display: none; text-decoration: none; margin: 10px;">登录</a>
-                <a id="lk-signup" href="/html/register.html" style="display: none; text-decoration: none; margin: 10px;">注册</a>
+                <a id="lk-profile" href="/html/profile.html" style="display: none; text-decoration: none; margin: 10px;">个人信息</a>
                 <a id="lk-logout" href="#" style="display: inline-block; text-decoration: none; margin: 10px;" onclick="logout()">退出</a>
                 <a href="/docs" style="color: #667eea; display: inline-block; text-decoration: none; margin: 10px;">查看 API 文档</a>
             </div>
@@ -70,11 +82,25 @@
     <script src="/static/js/common.js"></script>
     <script>
         // 检查是否已登录
-        getCurrentUser().then(user=>{
+        async function getUser() {
+            let user = null;
+            try {
+                user = await getCurrentUser();
+            } catch {
+            }
+            return user;
+        }
+
+        getUser().then(user => {
             if (user) {
                 document.querySelector('#lk-login').style.display = 'none';
-                document.querySelector('#lk-signup').style.display = 'none';
+                document.querySelector('#lk-profile').style.display = 'inline-block';
+                document.querySelector('#lk-profile').textContent = user.nickname || user.username || user.email || '个人信息';
                 document.querySelector('#lk-logout').style.display = 'inline-block';
+            } else {
+                document.querySelector('#lk-login').style.display = 'inline-block';
+                document.querySelector('#lk-profile').style.display = 'none';
+                document.querySelector('#lk-logout').style.display = 'none';
             }
             let html = '<div class="link-grid">' + common.public_links() + '</div>';
             if (user) {

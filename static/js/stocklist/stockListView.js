@@ -585,6 +585,14 @@ class StockListPanelPage extends RadioAnchorPage {
                         containeri.style.display = 'block';
                     }
                 }
+            } else if (fid == 10) { // 仅股票
+                if (stocki.code.startsWith('sh6') || stocki.code.startsWith('sz0') || stocki.code.startsWith('bj')) {
+                    containeri.style.display = 'block';
+                }
+            } else if (fid == 11) { // 仅基金ETF
+                if (stocki.code.startsWith('sh5') || stocki.code.startsWith('sz1')) {
+                    containeri.style.display = 'block';
+                }
             } else if (typeof(fid) === 'string') {
                 if (!stocki.strategies) {
                     continue;
@@ -780,7 +788,9 @@ const accld = {
             '盈利清仓',
             '全部',
             '今日买入',
-            '持有>1周'
+            '持有>1周',
+            '仅股票',
+            '仅基金ETF'
         ];
     },
     get currentListView() {
