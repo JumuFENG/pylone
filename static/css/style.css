@@ -20,6 +20,7 @@ div,input,button {
 
 input {
     padding: 2px 3px;
+    font-size: 16px;
 }
 
 .container {
@@ -127,12 +128,14 @@ textarea {
 
 textarea {
     resize: vertical;
+    font-size: 16px;
     min-height: 60px;
     font-family: monospace;
 }
 
 select {
     padding: 0 12px;
+    font-size: 16px;
 }
 
 input:focus,

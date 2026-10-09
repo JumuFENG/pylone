@@ -163,6 +163,17 @@ class TradingDate():
         return min(d.strftime('%Y-%m-%d'), cls.max_trading_date())
 
     @classmethod
+    def incoming_trading_date(cls):
+        """获取下一个交易日"""
+        if cls.max_trading_date() != cls.max_traded_date():
+            return cls.max_trading_date()
+
+        d = datetime.datetime.now() + datetime.timedelta(days=1)
+        while cls.is_holiday(d.strftime('%Y-%m-%d')):
+            d += datetime.timedelta(days=1)
+        return d.strftime('%Y-%m-%d')
+
+    @classmethod
     def recent_trading_dates(cls, n):
         """获取最近N个交易日列表"""
         dates = [cls.max_trading_date()]

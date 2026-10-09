@@ -4,9 +4,10 @@ from typing import Optional
 from urllib.parse import urlencode
 import requests
 import base64
+import traceback
 from app import PostParams, pparam_doc
 from app.hu import img_to_text
-from app.lofig import Config
+from app.lofig import Config, logger
 from app.hu.network import Network
 from app.hu.ollama import ollama
 from app.admin.system_settings import SystemSettings
@@ -95,7 +96,14 @@ def get_http_request(
     if referer is not None:
         headers['Referer'] = referer
 
-    response = requests.get(url, headers=headers)
+    try:
+        response = requests.get(url, headers=headers)
+    except Exception as e:
+        logger.warning(url)
+        logger.error(e)
+        logger.error(traceback.format_exc())
+        return None
+
     if response.headers.get('content-type') == 'application/json':
         return response.json()
     try:

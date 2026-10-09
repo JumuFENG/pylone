@@ -105,6 +105,9 @@ class Config:
     @lru_cache(maxsize=1)
     def h5_history_dir(cls):
         h5dir = cls.all_configs().get('client', {}).get('history_dir', './data')
+        if not os.path.isabs(h5dir):
+            project_root = os.path.join(os.path.dirname(__file__), '..')
+            h5dir = os.path.join(project_root, h5dir)
         h5dir = os.path.abspath(h5dir)
         if not os.path.isdir(h5dir):
             os.makedirs(h5dir)

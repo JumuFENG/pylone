@@ -30,7 +30,9 @@ class UserStockManager():
         deal['count'] = int(deal['count']) - ad.portion
         if 'fee' in deal:
             if ad.fee != float(deal['fee']) or ad.feeYh != float(deal['feeYh']) or ad.feeGh != float(deal['feeGh']) or ad.price != float(deal['price']):
-                upfee = {'price': deal['price'], 'fee': deal['fee'], 'feeYh': deal['feeYh'], 'feeGh': deal['feeGh'], 'user_id': user.id, 'time': deal['time'], 'code': deal['code'], 'typebs': deal['tradeType'], 'sid': deal['sid']}
+                if ad.time != deal['time']:
+                    await delete_records(UserArchivedDeals, UserArchivedDeals.user_id == user.id, UserArchivedDeals.time == ad.time, UserArchivedDeals.code == deal['code'], UserArchivedDeals.typebs == deal['tradeType'], UserArchivedDeals.sid == dsid)
+                upfee = {'price': deal['price'], 'fee': deal['fee'], 'feeYh': deal['feeYh'], 'feeGh': deal['feeGh'], 'user_id': user.id, 'time': deal['time'], 'code': deal['code'], 'typebs': deal['tradeType'], 'sid': deal['sid'], 'portion': ad.portion}
                 await upsert_one(UserArchivedDeals, upfee, ['user_id', 'time', 'code', 'typebs', 'sid'])
         return deal if deal['count'] > 0 else None
 
@@ -209,7 +211,7 @@ class UserStockManager():
                 cost += rembportion * bprice
 
         if remsell is not None and remsell[3] == 0 and soldcost > 0:
-            sinfo = {'cost_sold': soldcost, 'money_sold': remsell[4], 'earned': remsell[4] - soldcost, 'return_percent': (remsell[4] - soldcost) / remsell[4], 'user_id': user.id, 'time': remsell[1], 'code': code, 'sid': remsell[0]}
+            sinfo = {'cost_sold': soldcost, 'money_sold': remsell[4], 'earned': remsell[4] - soldcost, 'return_percent': 0 if remsell[4] == 0 else (remsell[4] - soldcost) / remsell[4], 'user_id': user.id, 'time': remsell[1], 'code': code, 'sid': remsell[0]}
             await upsert_one(UserStockSell, sinfo, ['user_id', 'time', 'code', 'sid'])
             soldcost = 0
         if remsell is not None and remsell[3] > 0:
@@ -413,7 +415,7 @@ class UserStockManager():
                 continue
             if edeal['code'][-6:] != deal['code'][-6:]:
                 continue
-            if not edeal.sid.startswith('fk') and edeal['sid'] != deal['sid']:
+            if not edeal['sid'].startswith('fk') and edeal['sid'] != deal['sid']:
                 continue
             if len(edeal['code']) > len(deal['code']):
                 code = edeal['code']
@@ -607,7 +609,7 @@ class UserStockManager():
             delsell.append((srec['time'], srec['sid']))
             sportion = srec['portion']
             while sportion > 0:
-                if len(buy_rec) == 0:
+                if bportion == 0 and len(buy_rec) == 0:
                     logger.warning('no buy record for %s %s', code, srec)
                     return ()
                 if bportion == 0:

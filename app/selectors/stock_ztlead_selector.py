@@ -101,6 +101,9 @@ class StockZtDaily(StockBaseSelector):
         if not osel:
             sel[7] = await self.get_bk(sel[0])
             sel[8] = await self.get_concept(sel[0])
+            if sel[7] == '' and sel[8] == '':
+                logger.warning(f'no bk and concept for {sel[0]}')
+                return
             self.wkselected.append(sel)
             return
         if osel[7] == '':
@@ -121,8 +124,6 @@ class StockZtDaily(StockBaseSelector):
             return
 
         zdf = zdf_from_code(c)
-        if zdf == 10 and await self.is_st_stock(c):
-            zdf = 5
         mkt = [10, 20, 30, 5].index(zdf)
 
         i = 0
@@ -130,7 +131,7 @@ class StockZtDaily(StockBaseSelector):
             if allkl[i].time < zdate:
                 i += 1
                 continue
-            if i == 0 and allkl[i].close == allkl[i].high and allkl[i].change * 100 >= zdf - 0.1:
+            if i == 0 and allkl[i].close == allkl[i].high and zdf + 0.5 > allkl[i].change * 100 >= zdf - 0.1:
                 await self.merge_selected([c, allkl[i].time, 0, 0, 1, 1, 0, "", "", mkt])
                 i += 1
                 continue
@@ -207,7 +208,7 @@ class StockZtDaily(StockBaseSelector):
         '''
         sdate = TradingDate.prev_trading_date(TradingDate.max_traded_date(), days)
         dsteps = await query_group_counts(self.db, 'time', self.db.time > sdate, self.db.lbc >= minstep, self.db.mkt == 0)
-        return [[t, c] for t, c in dsteps.items()]
+        return [[t, c] for t, c in sorted(dsteps.items())]
 
 
 class StockZdtEmotion(StockBaseSelector):

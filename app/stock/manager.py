@@ -25,6 +25,8 @@ from .storage.h5 import TransactionStorage as tss
 
 
 class AllStocks:
+    bkstock_failed_from_qtclist = False
+
     @classproperty
     def db(cls):
         return MdlAllStock
@@ -97,6 +99,7 @@ class AllStocks:
         if 'sh000001' in target_code:
             mxdate = await khis.max_date('sh000001')
             TradingDate.update_max_traded_date(mxdate)
+            logger.info(f'update max traded date to {mxdate}')
 
     @classmethod
     async def update_klines_by_code(cls, stocks, kltype: str='d') -> List[str]:
@@ -207,7 +210,7 @@ class AllStocks:
 
     @classmethod
     async def update_stock_transactions(cls):
-        if TradingDate.today() != TradingDate.max_trading_date():
+        if TradingDate.today() != TradingDate.max_trading_date() or TradingDate.max_traded_date() != TradingDate.max_trading_date():
             logger.warning(f'transactions should updated on the same day of trading day!')
             return
         rows = await query_values(cls.db)
@@ -224,11 +227,11 @@ class AllStocks:
         stocks_with_time = []
         for s in stocks:
             max_time = await tss.get_latest_time(s)
-            if max_time and max_time < TradingDate.max_trading_date():
+            if max_time is None or max_time < TradingDate.max_trading_date():
                 stocks_with_time.append(s)
         stocks = stocks_with_time
         if not stocks:
-            logger.info('no stocks need to update transactions')
+            logger.info('no stocks need to update transactions, %s, %s', max_time, stocks)
             return
         if TradingDate.trading_started() and not TradingDate.trading_ended():
             logger.warning(f'transactions should not updated during trading!')
@@ -319,11 +322,35 @@ class AllStocks:
         await upsert_many(cls.db, astocks, ['code'], 3000)
 
     @classmethod
-    def get_bkstocks(self, bks):
+    async def get_bkstocks(self, bks):
+        async def get_bkstocks_from_emxg(bks):
+            clist = []
+            for bkcode in bks:
+                bkname = await query_one_value(MdlStockBk, 'name', MdlStockBk.code == bkcode)
+                pdata = emxg.search_emxg(f'所属板块:{bkname}')
+                if pdata is None:
+                    continue
+                clist += [srt.get_fullcode(code[:6]) for code in pdata['代码']]
+            if len(bks) > 0:
+                clist = list(set(clist))
+            return clist
+
+        if self.bkstock_failed_from_qtclist:
+            return await get_bkstocks_from_emxg(bks)
+
         if isinstance(bks, str):
             bks = [bks]
-        bks = ','.join(['b:' + bk for bk in bks])
-        clist = Em.qt_clist(fs=bks, fields='f12,f13,f14,f26')
+        try:
+            bks = ','.join(['b:' + bk for bk in bks])
+            clist = Em.qt_clist(fs=bks, fields='f12,f13,f14,f26')
+            if not clist:
+                self.bkstock_failed_from_qtclist = True
+                return await get_bkstocks_from_emxg(bks)
+        except Exception as e:
+            logger.error(e)
+            logger.debug(format_exc())
+            self.bkstock_failed_from_qtclist = True
+            return await get_bkstocks_from_emxg(bks)
         return clist
 
     @classmethod
@@ -390,6 +417,8 @@ class AllStocks:
             return []
 
         pdata = emxg.search(keyword=f'涨跌幅>={minzdf}%' if minzdf > 0 else f'涨跌幅=<{minzdf}%')
+        if pdata is None or pdata.empty:
+            return []
         pdata = pdata.rename(columns = {
             '代码': 'code', '名称': 'name', '股票简称': 'name', '最新价': 'close', '涨跌额': 'change_px', '涨跌幅': 'change',
             '涨跌幅:前复权': 'change', '成交量(股)': 'volume', '成交量': 'volume', '开盘价:前复权': 'open', '开盘价': 'open',
@@ -416,8 +445,8 @@ class AllStocks:
 
     @classmethod
     async def load_all_funds(cls):
-        def get_stocks(bks, tp):
-            stocks = cls.get_bkstocks(bks)
+        async def get_stocks(bks, tp):
+            stocks = await cls.get_bkstocks(bks)
             bkstks = []
             for s in stocks:
                 d = str(s['f26'])
@@ -426,8 +455,8 @@ class AllStocks:
                 })
             return bkstks
         funds = []
-        funds.extend(get_stocks(['MK0021', 'MK0022', 'MK0023', 'MK0024'], 'ETF'))
-        funds.extend(get_stocks(['MK0404', 'MK0405', 'MK0406', 'MK0407'], 'LOF'))
+        funds.extend(await get_stocks(['MK0021', 'MK0022', 'MK0023', 'MK0024'], 'ETF'))
+        funds.extend(await get_stocks(['MK0404', 'MK0405', 'MK0406', 'MK0407'], 'LOF'))
         await upsert_many(cls.db, funds, ['code'])
 
     @classmethod
@@ -507,7 +536,7 @@ class AllBlocks:
 
         cls.bkmap.setCode(code)
         if code.startswith('BK'):
-            cls.bkmap.bkstocks = AllStocks.get_bkstocks(code)
+            cls.bkmap.bkstocks = await AllStocks.get_bkstocks(code)
             await cls.bkmap.saveFetched()
         else:
             await cls.bkmap.getNext()
