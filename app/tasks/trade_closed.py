@@ -7,7 +7,7 @@ import asyncio
 from traceback import format_exc
 sys.path.insert(0, os.path.realpath(os.path.dirname(__file__) + '/../..'))
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from app.lofig import Config, logging
 from app.stock.date import TradingDate
 from app.stock.manager import AllStocks, AllBlocks
@@ -24,7 +24,7 @@ async def save_earning_task():
         return
 
     dnow = datetime.now()
-    if dnow.weekday() == 4 or dnow.isocalendar()[1] != datetime.strptime(TradingDate.next_trading_date(TradingDate.today()), '%Y-%m-%d').isocalendar()[1]:
+    if dnow.weekday() == 4 or (dnow + timedelta(days=1)).isocalendar()[1] != datetime.strptime(TradingDate.incoming_trading_date(), '%Y-%m-%d').isocalendar()[1]:
         users = await admin_user_list()
         for u in users:
             if u.realcash == 0:
@@ -45,7 +45,7 @@ async def update_stock_transactions():
             await AllStocks.update_stock_transactions()
     except Exception as e:
         logger.error(f'Error updating stock transactions: {e}')
-        logger.debug(format_exc())
+        logger.error(format_exc())
 
 async def update_daily_trade_closed_history():
     try:

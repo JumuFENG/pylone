@@ -274,7 +274,7 @@ class Timers:
             logger.info(f'run_regular_tasks done, time used: {datetime.now() - dnow}')
         except Exception as e:
             logger.error(f'Error running regular tasks: {e}')
-            logger.debug(format_exc())
+            logger.error(format_exc())
 
     @classmethod
     def schedule_trading_tasks(cls):

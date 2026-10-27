@@ -141,6 +141,7 @@ class AllStocks:
         ofmt = srt.set_array_format('json')
         # srt.set_default_sources('dklines', 'dklines', ('xueqiu', 'ths', 'eastmoney', 'tdx', 'sina'), True)
         srt.set_default_sources('dklines', 'dklines', ('xueqiu', 'ths', 'tdx', 'sina'), True)
+        srt.set_default_sources('mklines', 'mklines', ('tencent', 'ths', 'sina'), True)
         ksize = 500
         for l, codes in fixlens.items():
             if l == sys.maxsize:
