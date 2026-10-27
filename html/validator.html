@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>公式验证工具</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    <link rel="stylesheet" href="/static/css/validator.css">
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
+</head>
+<body>
+    <div id="loading">加载中...</div>
+    <div id="alert" class="alert" style="display: none;"></div>
+    
+    <div class="container">
+        <div class="header">
+            <h1>公式验证工具</h1>
+            <div class="nav-links" id="nav-links"></div>
+        </div>
+
+        <div class="form-section">
+            <div class="form-row">
+                <div class="form-group">
+                    <label>股票代码</label>
+                    <input type="text" id="stock_code" placeholder="如: 000001" autocomplete="off">
+                </div>
+                <div class="form-group">
+                    <label>K线类型</label>
+                    <select id="kltype">
+                        <option value="101">日K</option>
+                        <option value="102">周K</option>
+                        <option value="103">月K</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>数量</label>
+                    <input type="number" id="kline_length" value="250" min="50" max="500">
+                </div>
+            </div>
+            
+            <div class="form-row">
+                <div class="form-group formula-group">
+                    <label>买入公式</label>
+                    <input type="text" id="buy_formula" placeholder="如: CROSS(MA(C,5),MA(C,10))" autocomplete="off">
+                    <div class="formula-hint">支持: MA, EMA, HHV, LLV, REF, CROSS, EVERY</div>
+                </div>
+            </div>
+            
+            <div class="form-row">
+                <div class="form-group formula-group">
+                    <label>卖出公式</label>
+                    <input type="text" id="sell_formula" placeholder="如: CROSS(MA(C,10),MA(C,5))" autocomplete="off">
+                    <div class="formula-hint">可选填</div>
+                </div>
+            </div>
+            
+            <div class="form-actions">
+                <button type="button" id="validate-btn" class="btn-primary">验证公式</button>
+            </div>
+        </div>
+
+        <div id="results-section" class="results-section" style="display: none;">
+            <div class="stats-row">
+                <div class="stat-card">
+                    <div class="stat-label">买入信号</div>
+                    <div class="stat-value buy-color" id="buy-count">0</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">卖出信号</div>
+                    <div class="stat-value sell-color" id="sell-count">0</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">K线数量</div>
+                    <div class="stat-value" id="kline-count">0</div>
+                </div>
+            </div>
+
+            <div class="chart-container">
+                <div id="kline-chart" style="width: 100%; height: 500px;"></div>
+            </div>
+
+            <div class="signals-section">
+                <div class="signals-tabs">
+                    <button class="tab-btn active" data-tab="buy-signals">买入信号</button>
+                    <button class="tab-btn" data-tab="sell-signals">卖出信号</button>
+                </div>
+                
+                <div id="buy-signals" class="tab-pane active">
+                    <table class="signals-table">
+                        <thead>
+                            <tr>
+                                <th>日期</th>
+                                <th>价格</th>
+                                <th>原因</th>
+                            </tr>
+                        </thead>
+                        <tbody id="buy-signals-tbody"></tbody>
+                    </table>
+                </div>
+                
+                <div id="sell-signals" class="tab-pane">
+                    <table class="signals-table">
+                        <thead>
+                            <tr>
+                                <th>日期</th>
+                                <th>价格</th>
+                                <th>原因</th>
+                            </tr>
+                        </thead>
+                        <tbody id="sell-signals-tbody"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <div id="empty-state" class="empty-state">
+            <p>输入股票代码和公式，点击"验证公式"查看信号</p>
+        </div>
+    </div>
+
+    <script src="/static/js/auth.js"></script>
+    <script src="/static/js/common.js"></script>
+    <script src="/static/js/guang.js"></script>
+    <script src="/static/js/validator.js"></script>
+</body>
+</html>
