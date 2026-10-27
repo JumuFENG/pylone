@@ -13,4 +13,3 @@ tenacity
 beautifulsoup4
 cachetools
 brotli
-MyTT
