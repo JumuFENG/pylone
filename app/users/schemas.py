@@ -39,6 +39,12 @@ class UserUpdate(BaseModel):
     is_active: Optional[bool] = None
     is_superuser: Optional[bool] = None
 
+    def create_update_dict(self):
+        return self.model_dump(exclude_unset=True, exclude_none=True)
+
+    def create_update_dict_superuser(self):
+        return self.model_dump(exclude_unset=True)
+
 
 class TokenRequest(BaseModel):
     id: Optional[int] = None

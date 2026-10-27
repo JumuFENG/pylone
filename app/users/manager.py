@@ -2,7 +2,7 @@ import jwt
 import time
 from typing import AsyncGenerator, Optional
 from sqlalchemy import select
-from fastapi import Depends, HTTPException
+from fastapi import Depends, HTTPException, Request
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from fastapi.security.http import HTTPBearer, HTTPAuthorizationCredentials
 
@@ -222,7 +222,12 @@ if not FASTAPI_USERS_AVAILABLE:
             await self.user_db.delete(user)
 
         async def update(self, user_update, user, safe=True, request=None):
-            update_data = user_update.model_dump(exclude_unset=True)
+            if hasattr(user_update, 'create_update_dict_superuser'):
+                update_data = user_update.create_update_dict_superuser()
+            elif hasattr(user_update, 'create_update_dict'):
+                update_data = user_update.create_update_dict()
+            else:
+                update_data = user_update.model_dump(exclude_unset=True) if hasattr(user_update, 'model_dump') else {}
             if 'password' in update_data:
                 update_data['hashed_password'] = self.password_helper.hash(update_data.pop('password'))
 

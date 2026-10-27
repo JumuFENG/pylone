@@ -3443,6 +3443,12 @@ class PlatesContainer {
         }
         actionArea.appendChild(replayBtn);
 
+        const copyBtn = document.createElement('button');
+        copyBtn.textContent = '⧉';
+        copyBtn.title = '复制当前所有股票代码';
+        copyBtn.onclick = _ => navigator.clipboard.writeText(JSON.stringify(Object.values(this.subcons).map(x => x.stocks).join().split(',')));
+        actionArea.appendChild(copyBtn);
+
         var setEditable = function(dayDiv, cb) {
             dayDiv.classList.add('editable');
             dayDiv.ondblclick = e => {
