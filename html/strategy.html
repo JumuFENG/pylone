@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>策略设置 - Pylone</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    <link rel="stylesheet" href="/static/css/strategy.css">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+</head>
+<body>
+    <div class="container">
+        <header class="header nav">
+            <div></div>
+            <nav class="main-nav nav-links">
+            </nav>
+        </header>
+
+        <div class="main-layout">
+            <aside class="sidebar">
+                <nav class="sidebar-nav">
+                    <ul class="nav-menu">
+                        <li class="nav-item active">
+                            <a href="strategy.html" class="nav-link">
+                                <i class="fas fa-cogs"></i>
+                                <span>策略设置</span>
+                            </a>
+                        </li>
+                    </ul>
+                </nav>
+            </aside>
+
+            <main class="main-content">
+                    <div class="strategy-grid" id="strategiesGrid">
+                    </div>
+                </section>
+            </main>
+        </div>
+    </div>
+
+    <script src="/static/js/auth.js"></script>
+    <script src="/static/js/common.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', async function() {
+            try {
+                let user = null;
+                try { user = await getCurrentUser(); } catch(e) {}
+                if (typeof common !== 'undefined' && common.init_nav_links) {
+                    common.init_nav_links(user);
+                }
+            } catch(e) { console.error(e); }
+        });
+    </script>
+    <script src="/static/js/strategy.js"></script>
+</body>
+</html>

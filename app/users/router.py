@@ -1,9 +1,10 @@
 import jwt
 import time
 import json
-from typing import List, Optional
-from fastapi import APIRouter, HTTPException, Depends, Query, Request, Response
-from sqlalchemy import select
+from typing import List, Optional, Dict, Any
+from fastapi import APIRouter, HTTPException, Depends, Query, Request, Response, Body
+from pydantic import BaseModel
+from sqlalchemy import select, delete
 from app import PostParams, pparam_doc
 from app.db import async_session_maker
 from .manager import (
@@ -17,8 +18,8 @@ from .manager import (
     cfg
 )
 from .usmanager import UserStockManager as usm
-from .schemas import UserRead, UserCreate, UserUpdate
-from .models import User
+from .schemas import UserRead, UserCreate, UserUpdate, IunStrategyItem
+from .models import User, UserIunStrategy
 
 
 router = APIRouter()
@@ -158,6 +159,8 @@ async def get_userbind(
     return users
 
 async def owner_user(user: User):
+    if not user:
+        raise HTTPException(status_code=401, detail="未登录")
     if user.parent_id:
         async for user_manager in get_user_manager():
             return await user_manager.get(user.parent_id)
@@ -215,3 +218,168 @@ async def get_archivedcodes(
     bearer_user: Optional[User] = Depends(fastapi_users.current_user(optional=True))
 ):
     return list(await usm.get_archived_code_since(basic_user or bearer_user, since, realcash, True))
+
+
+def _iunstrategy_to_item(row: UserIunStrategy) -> Dict[str, Any]:
+    item = {
+        "key": row.skey,
+        "enabled": bool(row.enabled),
+        "amount": row.amount,
+        "account": row.account,
+        "amtkey": row.amtkey,
+    }
+    if row.data:
+        try:
+            extra = json.loads(row.data)
+            if isinstance(extra, dict):
+                item.update(extra)
+        except Exception:
+            pass
+    return item
+
+
+def _iunstrategy_fields(skey: str, val: Dict[str, Any]) -> Dict[str, Any]:
+    item = dict(val)
+    enabled = bool(item.pop("enabled", False))
+    amount = item.pop("amount", None)
+    account = item.pop("account", None)
+    amtkey = item.pop("amtkey", None)
+    item.pop("key", None)
+    if isinstance(amount, (int, float)):
+        amount = str(amount)
+    if isinstance(account, (int, float)):
+        account = str(account)
+    if isinstance(amtkey, (int, float)):
+        amtkey = str(amtkey)
+    for k in ("enabled", "amount", "account", "amtkey", "key"):
+        item.pop(k, None)
+    data_json = json.dumps(item, ensure_ascii=False) if item else None
+    return {
+        "skey": skey,
+        "enabled": enabled,
+        "amount": amount,
+        "account": account,
+        "amtkey": amtkey,
+        "data": data_json,
+    }
+
+
+@router.get("/user/iunstrs")
+async def get_user_iunstrs(
+    basic_user: Optional[User] = Depends(get_current_user_basic),
+    bearer_user: Optional[User] = Depends(fastapi_users.current_user(optional=True)),
+):
+    owner = await owner_user(basic_user or bearer_user)
+
+    async with async_session_maker() as session:
+        result = await session.execute(select(UserIunStrategy).where(UserIunStrategy.user_id == owner.id))
+        rows = result.scalars().all()
+
+    return {r.skey: _iunstrategy_to_item(r) for r in rows}
+
+
+@router.put("/user/iunstrs")
+async def put_user_iunstrs(
+    payload: Dict[str, Any] = Body(...),
+    basic_user: Optional[User] = Depends(get_current_user_basic),
+    bearer_user: Optional[User] = Depends(fastapi_users.current_user(optional=True)),
+):
+    owner = await owner_user(basic_user or bearer_user)
+
+    data_dict = payload if isinstance(payload, dict) else {}
+
+    async with async_session_maker() as session:
+        try:
+            await session.execute(delete(UserIunStrategy).where(UserIunStrategy.user_id == owner.id))
+            for skey, val in data_dict.items():
+                if not isinstance(val, dict):
+                    continue
+                session.add(UserIunStrategy(user_id=owner.id, **_iunstrategy_fields(skey, val)))
+            await session.commit()
+        except Exception as e:
+            await session.rollback()
+            raise HTTPException(status_code=500, detail=str(e))
+
+    return {"status": "success"}
+
+
+@router.post("/user/iunstrs")
+async def post_user_iunstrs(
+    payload: Dict[str, Any] = Body(...),
+    basic_user: Optional[User] = Depends(get_current_user_basic),
+    bearer_user: Optional[User] = Depends(fastapi_users.current_user(optional=True)),
+):
+    return await put_user_iunstrs(payload, basic_user, bearer_user)
+
+
+@router.get("/user/iunstrs/{skey}")
+async def get_user_iunstrategy(
+    skey: str,
+    basic_user: Optional[User] = Depends(get_current_user_basic),
+    bearer_user: Optional[User] = Depends(fastapi_users.current_user(optional=True)),
+):
+    owner = await owner_user(basic_user or bearer_user)
+
+    async with async_session_maker() as session:
+        result = await session.execute(
+            select(UserIunStrategy).where(
+                UserIunStrategy.user_id == owner.id, UserIunStrategy.skey == skey
+            )
+        )
+        row = result.scalar_one_or_none()
+
+    if not row:
+        raise HTTPException(status_code=404, detail="策略不存在")
+    return _iunstrategy_to_item(row)
+
+
+@router.put("/user/iunstrs/{skey}")
+@router.post("/user/iunstrs/{skey}")
+async def put_user_iunstrategy(
+    skey: str,
+    payload: Dict[str, Any] = Body(...),
+    basic_user: Optional[User] = Depends(get_current_user_basic),
+    bearer_user: Optional[User] = Depends(fastapi_users.current_user(optional=True)),
+):
+    owner = await owner_user(basic_user or bearer_user)
+    fields = _iunstrategy_fields(skey, payload if isinstance(payload, dict) else {})
+
+    async with async_session_maker() as session:
+        try:
+            await session.execute(
+                delete(UserIunStrategy).where(
+                    UserIunStrategy.user_id == owner.id, UserIunStrategy.skey == skey
+                )
+            )
+            session.add(UserIunStrategy(user_id=owner.id, **fields))
+            await session.commit()
+        except Exception as e:
+            await session.rollback()
+            raise HTTPException(status_code=500, detail=str(e))
+
+    return {"status": "success"}
+
+
+@router.delete("/user/iunstrs/{skey}")
+async def delete_user_iunstrategy(
+    skey: str,
+    basic_user: Optional[User] = Depends(get_current_user_basic),
+    bearer_user: Optional[User] = Depends(fastapi_users.current_user(optional=True)),
+):
+    owner = await owner_user(basic_user or bearer_user)
+
+    async with async_session_maker() as session:
+        try:
+            result = await session.execute(
+                delete(UserIunStrategy).where(
+                    UserIunStrategy.user_id == owner.id, UserIunStrategy.skey == skey
+                )
+            )
+            await session.commit()
+        except Exception as e:
+            await session.rollback()
+            raise HTTPException(status_code=500, detail=str(e))
+
+    if result.rowcount == 0:
+        raise HTTPException(status_code=404, detail="策略不存在")
+    return {"status": "success"}

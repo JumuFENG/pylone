@@ -104,7 +104,11 @@
             }
             let html = '<div class="link-grid">' + common.public_links() + '</div>';
             if (user) {
-                html += '<div class="link-grid">' + common.normal_user_links() + '</div>';
+                let nlinks = common.normal_user_links();
+                if (!nlinks.includes('strategy.html')) {
+                    nlinks += '\n            <a href="/html/strategy.html" class="${location.pathname === \'/html/strategy.html\' ? \'active\' : \'\'}">策略设置</a>';
+                }
+                html += '<div class="link-grid">' + nlinks + '</div>';
             }
             if (user?.is_superuser) {
                 html += '<div class="link-grid">' + common.admin_links() + '</div>';

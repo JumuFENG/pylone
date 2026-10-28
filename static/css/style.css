@@ -170,8 +170,9 @@ select:focus {
 .btn-secondary {
     background: #6c757d;
     color: white;
-    margin-top: 10px;
 }
+
+.btn-secondary:hover { background: #545b62; }
 
 .btn-second {
     padding: 3px 12px;

@@ -6,7 +6,7 @@ from sqlalchemy import inspect
 # 添加项目路径
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from app.lofig import Config
-from app.db import cfg, engine, Base
+from app.db import engine, Base
 from app.users.models import User
 from app.stock.models import MdlStockShare
 from app.selectors.models import *
@@ -14,8 +14,10 @@ from app.users.schemas import UserCreate
 from app.users.manager import get_user_db, UserManager
 
 
-cfg['password'] = Config.simple_decrypt(cfg['password'])
-
+cfg = {'user': 'root', 'password': '', 'host': 'localhost', 'port': 3306, 'dbname': 'user_management'}
+cfg.update(Config.database_config())
+if cfg.get('password'):
+    cfg['password'] = Config.simple_decrypt(cfg['password'])
 
 async def check_database():
     """检查数据库是否存在，不存在则创建"""

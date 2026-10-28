@@ -1,5 +1,5 @@
-from typing import Optional
-from pydantic import BaseModel
+from typing import Optional, Any, Dict
+from pydantic import BaseModel, Field
 
 
 class UserBase(BaseModel):
@@ -44,6 +44,17 @@ class UserUpdate(BaseModel):
 
     def create_update_dict_superuser(self):
         return self.model_dump(exclude_unset=True)
+
+
+class IunStrategyItem(BaseModel):
+    key: str
+    enabled: bool = False
+    amount: Optional[Any] = None
+    account: Optional[str] = None
+    amtkey: Optional[str] = None
+
+    class Config:
+        extra = "allow"
 
 
 class TokenRequest(BaseModel):

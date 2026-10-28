@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, Integer, SmallInteger, Float, PrimaryKeyConstraint, Boolean
+from sqlalchemy import Column, String, Integer, SmallInteger, Float, PrimaryKeyConstraint, Boolean, Text
 from app.db import Base
 
 
@@ -46,6 +46,22 @@ class UserStrategy(Base):
 
     __table_args__ = (
         PrimaryKeyConstraint('user_id', 'code', 'id', name='pk_user_strategy'),
+    )
+
+
+class UserIunStrategy(Base):
+    __tablename__ = "user_iunstrategy"
+
+    user_id = Column(Integer, nullable=False)
+    skey = Column(String(64), nullable=False)
+    enabled = Column(Boolean, nullable=False, default=False)
+    amount = Column(String(32), nullable=True)
+    account = Column(String(32), nullable=True)
+    amtkey = Column(String(32), nullable=True)
+    data = Column(Text, nullable=True)
+
+    __table_args__ = (
+        PrimaryKeyConstraint('user_id', 'skey', name='pk_user_iunstrategy'),
     )
 
 
